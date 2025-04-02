@@ -9,8 +9,8 @@ import java.util.Random;
 public class ProcessManager {
     private static final String TAG = "ProcessManager";
     private static final int MAX_QUEUE_CAPACITY = 10;
-    private static final double MIN_SPAWN_INTERVAL = 4.0; // Minimum time between spawns
-    private static final double MAX_SPAWN_INTERVAL = 7.0; // Maximum time between spawns
+    private static final double MIN_SPAWN_INTERVAL = 3.0; // Minimum time between spawns
+    private static final double MAX_SPAWN_INTERVAL = 5.0; // Maximum time between spawns
     private static final double IO_PROCESS_PROBABILITY = 0.3; // 30% chance for IO process
     private static final double BASE_PATIENCE_S = 15.0;
     private static final double MIN_CPU_TIME_S = 4.0;

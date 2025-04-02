@@ -14,15 +14,14 @@ import java.util.concurrent.TimeUnit;
 
 public class GameManager {
     private static final String TAG = "GameManager";
-    // Make constants public so GameView can access them for drawing
-    public static final int INITIAL_HEALTH = 100; // Example value
-    private static final int PATIENCE_PENALTY = 10; // Example value
-    private static final int FCFS_PENALTY = 5; // Example value
-    private static final int PROCESS_COMPLETION_SCORE = 20; // Example value
+    public static final int INITIAL_HEALTH = 100; 
+    private static final int PATIENCE_PENALTY = 10; 
+    private static final int FCFS_PENALTY = 5; 
+    private static final int PROCESS_COMPLETION_SCORE = 20; 
     private static final int NUM_CORES = 4;
     public static final int MEMORY_CAPACITY = 16;
-    public static final int BUFFER_CAPACITY = 5; // Example buffer size
-    private static final int NUM_CLIENTS = 2; // Example number of clients
+    public static final int BUFFER_CAPACITY = 5; 
+    private static final int NUM_CLIENTS = 2; 
 
     private int score;
     private int health;
