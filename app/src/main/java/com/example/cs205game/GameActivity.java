@@ -7,6 +7,7 @@ import android.util.Log;
 import android.view.WindowInsets;
 import android.view.WindowInsetsController;
 import android.view.WindowManager;
+import android.view.Window;
 
 public class GameActivity extends Activity {
 
@@ -17,6 +18,9 @@ public class GameActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         Log.d(TAG, "onCreate");
+
+        // Keep screen on during gameplay
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         // Set the content view *first*
         gameView = new GameView(this);

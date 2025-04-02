@@ -27,6 +27,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
     private static final String TAG = "GameView";
     private GameThread thread;
     private GameManager gameManager;
+    private SharedBuffer sharedBuffer;
 
     // --- Paints ---
     private Paint backgroundPaint;
@@ -85,7 +86,6 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
     private Map<Integer, Rect> coreAreaRects = new HashMap<>();
     private Rect ioAreaRect = new Rect();
     private Map<Integer, Rect> queueProcessRects = new HashMap<>();
-    private SharedBuffer sharedBuffer;
 
     // --- Temporary Rects ---
     private Rect tempRect = new Rect();
@@ -109,8 +109,9 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
         getHolder().addCallback(this);
         setFocusable(true);
 
-        gameManager = new GameManager();
-        sharedBuffer = gameManager.getSharedBuffer();
+        // Initialize GameManager with context
+        this.gameManager = new GameManager(context);
+        this.sharedBuffer = gameManager.getSharedBuffer();
         initializePaints();
 
         queueAreaPaint = new Paint();
@@ -901,7 +902,8 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
 
         canvas.drawRect(healthBgRect, healthBarBackgroundPaint);
         canvas.drawRect(healthFgRect, healthBarPaint);
-        canvas.drawText("HP", healthBgRect.centerX() - textPaint.measureText("HP")/2, healthBgRect.centerY() + textPaint.getTextSize()/3, textPaint);
+        canvas.drawText("HP", healthBgRect.centerX() - labelPaint.measureText("HP")/2, 
+                       healthBgRect.centerY() + labelPaint.getTextSize()/3, labelPaint);
     }
 
     private void drawMemory(Canvas canvas, Rect area) {

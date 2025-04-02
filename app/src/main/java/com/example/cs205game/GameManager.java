@@ -1,6 +1,10 @@
 package com.example.cs205game;
 
 import android.util.Log;
+import android.os.Vibrator;
+import android.os.Build;
+import android.os.VibrationEffect;
+import android.content.Context; // Required for getting Vibrator service
 
 import java.util.ArrayList;
 import java.util.List;
@@ -30,10 +34,13 @@ public class GameManager {
     private final List<Client> clients;
     private final ExecutorService clientExecutor; // Executor for client threads
     private volatile boolean gameRunning = false;
+    private Vibrator vibrator; // Vibrator instance
+    private Context context; // Context needed for vibrator
 
     // Add references for UI updates later (e.g., GameView)
 
-    public GameManager() {
+    public GameManager(Context context) { // Modify constructor to accept Context
+        this.context = context;
         // Reset static process ID counter at the start of a new game manager instance
         Process.resetIdCounter(); 
 
@@ -57,6 +64,9 @@ public class GameManager {
             clients.add(new Client(i, sharedBuffer, this));
         }
         Log.i(TAG, "GameManager initialized.");
+
+        // Get Vibrator service
+        vibrator = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
     }
 
     public void startGame() {
@@ -123,9 +133,6 @@ public class GameManager {
         // Update IO Area
         ioArea.update(deltaTime, this::handleIoCompleted);
 
-        // Memory doesn't need update
-        // memory.update(); // Remove this line as Memory class doesn't have an update method
-
         // Check for game over condition
         if (health <= 0) {
             Log.wtf(TAG, "GAME OVER! Health reached zero.");
@@ -139,7 +146,7 @@ public class GameManager {
         if (!gameRunning) return; // Don't penalize if game stopped
         Log.w(TAG, "Process " + process.getId() + " removed due to expired patience.");
         decreaseHealth(PATIENCE_PENALTY);
-        // TODO: Update UI to remove the process visually
+       
     }
 
     /**
@@ -169,13 +176,13 @@ public class GameManager {
     private void handleIoRequired(IOProcess ioProcess) {
         if (!gameRunning) return;
         Log.i(TAG, "IO Required for Process " + ioProcess.getId() + ". Waiting for user action.");
-        // TODO: Update UI to indicate IO is required (e.g., highlight process/IO area)
+       
     }
 
     private void handleIoCompleted(IOProcess ioProcess) {
         if (!gameRunning) return;
          Log.i(TAG, "IO Completed for Process " + ioProcess.getId() + ". Waiting for user action.");
-         // TODO: Update UI to indicate IO is finished and ready to move back.
+       
     }
 
     /**
@@ -214,14 +221,14 @@ public class GameManager {
         if (!processManager.isProcessAtHead(processId)) {
             Log.w(TAG, "FCFS Violation: Process " + processId + " is not at the head of the queue.");
             decreaseHealth(FCFS_PENALTY);
-            // TODO: Provide visual feedback for FCFS error
+           
             return;
         }
 
         // 2. Check if core is free
         if (targetCore.isUtilized()) {
              Log.w(TAG, "User Action Failed: Core " + targetCoreId + " is busy.");
-             // TODO: Provide visual feedback (e.g., cannot drop here)
+             
              return;
         }
 
@@ -229,13 +236,13 @@ public class GameManager {
         Process processToMove = processManager.getProcessQueue().peek(); // Assuming FCFS check passed
         if (processToMove == null || processToMove.getId() != processId) {
             Log.e(TAG, "Mismatch between FCFS check and queue head? ProcessID: " + processId);
-            return; // Should not happen if FCFS check passed
+            return; 
         }
 
         // 4. Check memory
         if (!memory.hasEnoughMemory(processToMove.getMemoryRequirement())) {
              Log.w(TAG, "User Action Failed: Not enough memory for Process " + processId + ". Required: " + processToMove.getMemoryRequirement() + ", Available: " + memory.getAvailableMemory());
-             // TODO: Provide visual feedback (e.g., memory full indicator)
+             
              return;
         }
 
@@ -243,7 +250,7 @@ public class GameManager {
         if (memory.allocateMemory(processToMove.getMemoryRequirement())) {
              processManager.takeProcessFromQueue(); // Now remove from queue
              targetCore.assignProcess(processToMove);
-             // TODO: Update UI - Animate process moving, update memory visuals
+             
         } else {
             // Should not happen due to check, but handle defensively
              Log.e(TAG, "Memory allocation failed unexpectedly after check for Process " + processId);
@@ -322,14 +329,14 @@ public class GameManager {
         // 2. Check if IO is actually completed
         if (!processInIO.isIoCompleted()) {
             Log.w(TAG, "User Action Failed: IO not yet complete for Process " + processId);
-            // TODO: Provide visual feedback (IO still running)
+            
             return;
         }
 
          // 3. Check if the target core is free
         if (targetCore.isUtilized()) {
             Log.w(TAG, "User Action Failed: Target Core " + targetCoreId + " is busy.");
-            // TODO: Provide visual feedback (Core busy)
+            
             return;
         }
 
@@ -338,8 +345,7 @@ public class GameManager {
         processInIO.setCpuPausedForIO(false); // Allow CPU timer to resume
         processInIO.setCurrentState(Process.ProcessState.IO_COMPLETED_WAITING_CORE); // State before core update confirms it's ON_CORE
         targetCore.assignProcess(processInIO);
-        // Memory remains allocated
-        // TODO: Update UI - Animate process moving
+      
     }
 
     // --- Getters for UI ---
@@ -384,18 +390,32 @@ public class GameManager {
     private synchronized void decreaseHealth(int amount) {
         if (!gameRunning) return;
         this.health -= amount;
-        if (this.health < 0) {
-            this.health = 0;
-        }
         Log.i(TAG, "Health decreased by " + amount + ". Current health: " + this.health);
-        // TODO: Update Health UI
+
+        // Vibrate on HP loss
+        if (vibrator != null && vibrator.hasVibrator()) {
+            long[] pattern = {0, 100}; // Vibrate for 100ms
+            // Use VibrationEffect for newer APIs
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1)); // -1 means don't repeat
+            } else {
+                // Deprecated in API 26
+                vibrator.vibrate(pattern, -1); 
+            }
+        }
+
+        if (this.health <= 0) {
+            this.health = 0;
+            Log.wtf(TAG, "GAME OVER! Health reached zero.");
+            stopGame();
+        }
     }
 
     private synchronized void increaseScore(int amount) {
         if (!gameRunning) return;
         this.score += amount;
         Log.i(TAG, "Score increased by " + amount + ". Current score: " + this.score);
-        // TODO: Update Score UI
+       
     }
 
     public void resetGame() {
