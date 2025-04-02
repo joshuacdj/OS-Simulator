@@ -55,7 +55,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
     private final Paint labelPaint;
     private final Paint scorePaint;
     private final Paint scoreBackgroundPaint;
-    private final Paint whiteLabelPaint; // New paint for white labels
+    private final Paint whiteLabelPaint; 
 
     // --- Game Over State ---
     private boolean isGameOver = false;

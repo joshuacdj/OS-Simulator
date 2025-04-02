@@ -13,9 +13,9 @@
         android:id="@+id/textViewTitle"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="64dp"
+        android:layout_marginTop="8dp"
         android:fontFamily="monospace"
-        android:text="OS Simulator"
+        android:text="Be the OS!"
         android:textColor="#E0E0E0"
         android:textSize="34sp"
         android:textStyle="bold"
@@ -36,12 +36,29 @@
         android:text="Start Game"
         android:textColor="#FFFFFF"
         android:textSize="18sp"
-        app:layout_constraintBottom_toTopOf="@+id/buttonCredits"
+        app:layout_constraintBottom_toTopOf="@+id/buttonHowToPlay"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@+id/textViewTitle"
-        app:layout_constraintVertical_bias="0.5"
-        app:layout_constraintVertical_chainStyle="packed" />
+        app:layout_constraintVertical_chainStyle="spread_inside" />
+
+    <Button
+        android:id="@+id/buttonHowToPlay"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="128dp"
+        android:layout_marginEnd="128dp"
+        android:backgroundTint="#0F3460"
+        android:fontFamily="monospace"
+        android:paddingTop="16dp"
+        android:paddingBottom="16dp"
+        android:text="How to Play"
+        android:textColor="#FFFFFF"
+        android:textSize="18sp"
+        app:layout_constraintBottom_toTopOf="@+id/buttonCredits"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/buttonStartGame" />
 
     <Button
         android:id="@+id/buttonCredits"
@@ -49,7 +66,6 @@
         android:layout_height="wrap_content"
         android:layout_marginStart="128dp"
         android:layout_marginEnd="128dp"
-        android:layout_marginTop="24dp"
         android:backgroundTint="#0F3460"
         android:fontFamily="monospace"
         android:paddingTop="16dp"
@@ -60,7 +76,7 @@
         app:layout_constraintBottom_toTopOf="@+id/buttonQuit"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@+id/buttonStartGame" />
+        app:layout_constraintTop_toBottomOf="@+id/buttonHowToPlay" />
 
     <Button
         android:id="@+id/buttonQuit"
@@ -68,7 +84,7 @@
         android:layout_height="wrap_content"
         android:layout_marginStart="128dp"
         android:layout_marginEnd="128dp"
-        android:layout_marginTop="24dp"
+        android:layout_marginBottom="48dp"
         android:backgroundTint="#0F3460"
         android:fontFamily="monospace"
         android:paddingTop="16dp"

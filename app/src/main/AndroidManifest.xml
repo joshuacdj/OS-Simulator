@@ -27,7 +27,28 @@
         <activity
             android:name=".GameActivity"
             android:exported="false"
-            android:screenOrientation="landscape" /> <!-- Optional: Force landscape if desired -->
+            android:screenOrientation="landscape"
+            android:theme="@style/Theme.AppCompat.NoActionBar" />
+
+        <activity
+            android:name=".CreditsActivity"
+            android:exported="false"
+            android:label="Credits"
+            android:parentActivityName=".MainActivity">
+            <meta-data
+                android:name="android.support.PARENT_ACTIVITY"
+                android:value=".MainActivity" />
+        </activity>
+
+        <activity
+            android:name=".HowToPlayActivity"
+            android:exported="false"
+            android:label="How to Play"
+            android:parentActivityName=".MainActivity" >
+            <meta-data
+                android:name="android.support.PARENT_ACTIVITY"
+                android:value=".MainActivity" />
+        </activity>
 
     </application>
 

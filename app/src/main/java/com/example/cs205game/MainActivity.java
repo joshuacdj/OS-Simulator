@@ -22,6 +22,7 @@ public class MainActivity extends AppCompatActivity {
         Button buttonStartGame = findViewById(R.id.buttonStartGame);
         Button buttonCredits = findViewById(R.id.buttonCredits);
         Button buttonQuit = findViewById(R.id.buttonQuit);
+        Button howToPlayButton = findViewById(R.id.buttonHowToPlay);
 
         // Set click listener for Start Game
         buttonStartGame.setOnClickListener(v -> {
@@ -29,15 +30,21 @@ public class MainActivity extends AppCompatActivity {
             startActivity(intent);
         });
 
-        // Set click listener for Credits (placeholder)
+        // Set click listener for Credits
         buttonCredits.setOnClickListener(v -> {
-            // TODO: Implement Credits Activity/Screen
-            android.widget.Toast.makeText(this, "Credits screen not implemented yet", android.widget.Toast.LENGTH_SHORT).show();
+            Intent intent = new Intent(MainActivity.this, CreditsActivity.class);
+            startActivity(intent);
         });
 
         // Set click listener for Quit
         buttonQuit.setOnClickListener(v -> {
             finish(); // Close the activity
+        });
+
+        // Set click listener for How to Play
+        howToPlayButton.setOnClickListener(v -> {
+            Intent intent = new Intent(MainActivity.this, HowToPlayActivity.class);
+            startActivity(intent);
         });
 
         // Apply window insets listener
