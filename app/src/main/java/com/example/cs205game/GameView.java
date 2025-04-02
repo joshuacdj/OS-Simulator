@@ -635,16 +635,21 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
         canvas.drawText("GAME OVER", textX, textY, gameOverTextPaint);
 
         // Define button dimensions
-        float buttonWidth = panelWidth * 0.4f;
+        float buttonWidth = panelWidth * 0.35f; // Slightly smaller buttons
         float buttonHeight = panelHeight * 0.2f;
-        float buttonSpacing = panelWidth * 0.1f;
+        float buttonSpacing = panelWidth * 0.1f; // Increase spacing factor if needed, or adjust calculation below
+        float totalButtonWidth = buttonWidth * 2;
+        float totalSpacingNeeded = panelWidth - totalButtonWidth; // Total space available for spacing
+        float spaceBetweenButtons = totalSpacingNeeded * 0.4f; // Use 40% of available space for gap between buttons
+        float spaceOnSides = (totalSpacingNeeded - spaceBetweenButtons) / 2f; // Distribute remaining space to sides
+
         float buttonY = panelRect.top + panelHeight * 0.6f; // Position lower down
 
-        // Calculate button positions
-        float retryLeft = panelRect.left + buttonSpacing;
+        // Calculate button positions with increased spacing
+        float retryLeft = panelRect.left + spaceOnSides;
         retryButtonRect.set(retryLeft, buttonY, retryLeft + buttonWidth, buttonY + buttonHeight);
 
-        float quitLeft = panelRect.right - buttonSpacing - buttonWidth;
+        float quitLeft = retryLeft + buttonWidth + spaceBetweenButtons;
         quitButtonRect.set(quitLeft, buttonY, quitLeft + buttonWidth, buttonY + buttonHeight);
 
         // Draw buttons
@@ -654,7 +659,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
         // Draw button text (centered)
         float buttonTextY = retryButtonRect.centerY() + buttonTextPaint.getTextSize() / 3f;
         canvas.drawText("Retry", retryButtonRect.centerX(), buttonTextY, buttonTextPaint);
-        canvas.drawText("Quit", quitButtonRect.centerX(), buttonTextY, buttonTextPaint);
+        canvas.drawText("Quit to Title", quitButtonRect.centerX(), buttonTextY, buttonTextPaint); // Updated text
     }
 
     private void calculateLayoutRects(int width, int height) {
