@@ -1,18 +1,24 @@
 package com.example.cs205game;
 
 import android.util.Log;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 
 public class Core {
     private static final String TAG = "Core";
     private final int coreId;
     private Process currentProcess = null;
     private boolean isUtilized = false;
+    private final BiConsumer<Integer, Process> onCpuCompleteCallback; // Callback for when CPU work is done (passes coreId, process)
+    private final Consumer<IOProcess> onIoRequiredCallback;   // Callback for when IO is needed
 
-    public Core(int id) {
+    public Core(int id, BiConsumer<Integer, Process> onCpuCompleteCallback, Consumer<IOProcess> onIoRequiredCallback) {
         this.coreId = id;
+        this.onCpuCompleteCallback = onCpuCompleteCallback;
+        this.onIoRequiredCallback = onIoRequiredCallback;
     }
 
-    public int getCoreId() {
+    public int getId() {
         return coreId;
     }
 

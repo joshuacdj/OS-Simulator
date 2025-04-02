@@ -41,7 +41,10 @@ public class GameManager {
         this.ioArea = new IOArea();
         this.cpuCores = new ArrayList<>(NUM_CORES);
         for (int i = 0; i < NUM_CORES; i++) {
-            cpuCores.add(new Core(i));
+            int coreId = i; // Need final variable for lambda capture
+            cpuCores.add(new Core(coreId, 
+                                (id, process) -> this.handleCpuCompleted(id, process), // Correct callback signature for CPU completion
+                                this::handleIoRequired));                           // Correct callback for IO required
         }
         this.sharedBuffer = new SharedBuffer(BUFFER_CAPACITY);
         this.clients = new ArrayList<>(NUM_CLIENTS);
@@ -108,7 +111,10 @@ public class GameManager {
 
         // Update cores
         for (Core core : cpuCores) {
-            core.update(deltaTime, this::handleCpuCompleted, this::handleIoRequired);
+            // Use lambda to pass both coreId and process to the handler
+            core.update(deltaTime, 
+                (process) -> handleCpuCompleted(core.getId(), process), 
+                this::handleIoRequired);
         }
 
         // Update IO Area
@@ -133,25 +139,28 @@ public class GameManager {
         // TODO: Update UI to remove the process visually
     }
 
-    // This method is called from the main game thread (Core update)
-    private void handleCpuCompleted(Process process) {
-        if (!gameRunning) return;
-        Log.i(TAG, "Process " + process.getId() + " completed CPU work. Attempting to add to buffer.");
+    /**
+     * Callback from Core when a process finishes its CPU execution.
+     * Moves the process to the SharedBuffer and frees its memory.
+     * @param coreId The ID of the core that finished.
+     * @param process The process that completed its CPU time.
+     */
+    private void handleCpuCompleted(int coreId, Process process) {
+        cpuCores.get(coreId).removeProcess();
+        Log.i(TAG, "Process " + process.getId() + " completed CPU on Core " + coreId);
+        
+        // Deallocate memory *before* putting into buffer
+        memory.freeMemory(process.getMemoryRequirement());
+        Log.i(TAG, "Deallocated " + process.getMemoryRequirement() + "GB for Process " + process.getId());
 
-        // Attempt to put the process in the buffer asynchronously
-        // to avoid blocking the main game loop if the buffer is full.
-        // Using a simple approach here: If buffer is instantly full, log warning.
-        // A more robust solution might use a separate thread or queue for putting.
-        new Thread(() -> {
-            try {
-                sharedBuffer.put(process); // This might block the new thread if buffer full
-                // TODO: Update UI to show process in buffer area (needs thread-safe UI update)
-            } catch (InterruptedException e) {
-                Log.w(TAG, "Thread interrupted while trying to put Process " + process.getId() + " into buffer.");
-                Thread.currentThread().interrupt();
-                // Handle potential state inconsistency if needed
-            }
-        }).start();
+        process.setCurrentState(Process.ProcessState.IN_BUFFER);
+        try {
+            sharedBuffer.put(process);
+            Log.i(TAG, "Process " + process.getId() + " moved to SharedBuffer.");
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            Log.e(TAG, "Interrupted while putting process " + process.getId() + " into buffer", e);
+        }
     }
 
     private void handleIoRequired(IOProcess ioProcess) {
@@ -167,17 +176,19 @@ public class GameManager {
     }
 
     /**
-     * Callback method executed by a Client thread after consuming a process.
-     * MUST be thread-safe if accessing shared GameManager state directly.
-     * @param consumedProcess The process that was successfully consumed.
+     * Callback from Client thread when it finishes consuming a process.
+     * Updates the score.
+     * @param clientId The ID of the client that finished.
+     * @param process The process that was consumed.
      */
-    // Note: This is called from Client threads
-    public synchronized void handleClientConsumed(Process consumedProcess) {
-        if (!gameRunning) return; // Ignore if game stopped between consumption and callback
-        Log.i(TAG, "Handling consumption of Process " + consumedProcess.getId());
-        increaseScore(PROCESS_COMPLETION_SCORE);
-        memory.freeMemory(consumedProcess.getMemoryRequirement());
-        // TODO: Update UI to remove process from buffer/client area
+    public void handleClientConsumed(int clientId, Process process) {
+        Log.i(TAG, "Client " + clientId + " finished consuming Process " + process.getId());
+        // Memory is now deallocated in handleCpuCompleted
+        // memory.deallocate(process.getMemoryRequirement()); 
+        process.setProcessCompleted(true);
+        process.setCurrentState(Process.ProcessState.CONSUMED);
+        score += 100; // Add score for successful consumption
+        Log.i(TAG, "Score increased to " + score);
     }
 
     // --- Action Methods (Called by UI/Input Handler - Main Thread) ---

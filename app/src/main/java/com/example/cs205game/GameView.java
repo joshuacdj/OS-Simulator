@@ -342,7 +342,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
             if (p != null && p instanceof IOProcess) {
                 IOProcess ioP = (IOProcess) p;
                 if (ioP.isCpuPausedForIO()) {
-                    RectF pBounds = getProcessVisualBoundsOnCore(core.getCoreId(), p);
+                    RectF pBounds = getProcessVisualBoundsOnCore(core.getId(), p);
                     if (pBounds != null && pBounds.contains(x, y)) {
                         return p;
                     }
@@ -424,7 +424,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
      private int findCoreIdForProcess(int processId) {
          for(Core core : gameManager.getCpuCores()) {
              if(core.isUtilized() && core.getCurrentProcess() != null && core.getCurrentProcess().getId() == processId) {
-                 return core.getCoreId();
+                 return core.getId();
              }
          }
          return -1; 
@@ -822,14 +822,14 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
             Core core = gameManager.getCpuCores().get(coreId);
 
             canvas.drawRect(coreRect, corePaint);
-            canvas.drawText("Core " + core.getCoreId(), coreRect.left + 10, coreRect.top + 30, textPaint);
+            canvas.drawText("Core " + core.getId(), coreRect.left + 10, coreRect.top + 30, textPaint);
 
             Process p = core.getCurrentProcess();
             if (core.isUtilized() && p != null) {
                 if (p == draggingProcess) continue;
 
                 // Draw process representation centered within the core rect
-                 RectF pBounds = getProcessVisualBoundsOnCore(coreId, p);
+                 RectF pBounds = getProcessVisualBoundsOnCore(core.getId(), p);
                  if (pBounds != null) {
                      drawProcessRepresentation(canvas, p, pBounds);
 

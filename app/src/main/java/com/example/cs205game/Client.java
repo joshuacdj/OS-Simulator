@@ -34,7 +34,9 @@ public class Client implements Runnable {
                     
                     // Process consumed
                     if (running) {
-                        gameManager.handleClientConsumed(process);
+                        // Notify GameManager about consumption completion
+                        // This might involve score updates, removing from UI, etc.
+                        gameManager.handleClientConsumed(id, process);
                     }
                     currentlyConsumingProcess = null;
                     isConsuming = false;
