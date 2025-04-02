@@ -54,6 +54,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
     private final Paint labelPaint;
     private final Paint scorePaint;
     private final Paint scoreBackgroundPaint;
+    private final Paint whiteLabelPaint; // New paint for white labels
 
     // --- Drag and Drop State ---
     private Process draggingProcess = null;
@@ -119,6 +120,11 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
         scoreBackgroundPaint = new Paint();
         scoreBackgroundPaint.setColor(Color.rgb(50, 50, 50));
         scoreBackgroundPaint.setStyle(Paint.Style.FILL);
+
+        whiteLabelPaint = new Paint();
+        whiteLabelPaint.setColor(Color.WHITE);
+        whiteLabelPaint.setTextSize(40f); // Same size as labelPaint
+        whiteLabelPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD)); // Same style
 
         Log.i(TAG, "GameView created");
     }
@@ -490,12 +496,12 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
 
     
     public void drawGame(Canvas canvas) {
-        super.draw(canvas);
         if (canvas == null) return;
-
-        canvas.drawPaint(backgroundPaint);
         int width = canvas.getWidth();
         int height = canvas.getHeight();
+
+        // Draw background
+        canvas.drawPaint(backgroundPaint);
 
         // Ensure layout rects are calculated
         if (processQueueAreaRect.width() == 0) { // Simple check if not calculated yet
@@ -503,16 +509,10 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
         }
 
         // --- Draw Static Layout Elements ---
-        canvas.drawRect(processQueueAreaRect, processQueueAreaPaint);
-        canvas.drawText("Process Queue", 10, 40, textPaint);
         canvas.drawRect(memoryAreaRect, corePaint); 
-        canvas.drawText("Memory", memoryAreaRect.left + 10, memoryAreaRect.top + 40, textPaint);
         canvas.drawRect(bufferAreaRect, bufferPaint);
-        canvas.drawText("Buffer", bufferAreaRect.left + 10, bufferAreaRect.top + 40, textPaint);
         canvas.drawRect(clientAreaRect, clientAreaPaint);
-        canvas.drawText("Clients", clientAreaRect.left + 10, clientAreaRect.top + 40, textPaint);
         canvas.drawRect(ioAreaRect, ioAreaPaint);
-        canvas.drawText("I/O Area", ioAreaRect.left + 10, ioAreaRect.top + 40, textPaint);
         
 
         // --- Draw Dynamic Elements ---
@@ -613,8 +613,8 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
         RectF queueArea = new RectF(queueLeft, queueTop, queueLeft + queueWidth, queueTop + queueHeight);
         canvas.drawRect(queueArea, queueAreaPaint);
         
-        // Draw "Process Queue" label above the border
-        canvas.drawText("Process Queue", queueLeft, queueTop - 20, labelPaint);
+        // Draw "Process Queue" label above the border using white paint
+        canvas.drawText("Process Queue", queueLeft, queueTop - 20, whiteLabelPaint);
         
         // Clear previous process rectangles
         queueProcessRects.clear();
@@ -857,6 +857,10 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
     }
 
     private void drawIOArea(Canvas canvas, Rect area) {
+         // Draw IO Area label first, shifted down slightly
+         float labelY = area.top + whiteLabelPaint.getTextSize() + 10; // Use text size for positioning
+         canvas.drawText("I/O Area", area.left + 10, labelY, whiteLabelPaint);
+
          IOProcess p = gameManager.getIoArea().getCurrentProcess();
          if (p != null) {
             if (p == draggingProcess) return;
@@ -890,10 +894,14 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
         bufferBgPaint.setColor(Color.LTGRAY);
         canvas.drawRect(area, bufferBgPaint);
 
-        // Draw title
-        canvas.drawText("Buffer", area.left + 10, area.top + 20, labelPaint);
-        canvas.drawText("Size: " + sharedBuffer.size() + " / " + GameManager.BUFFER_CAPACITY, 
-                       area.left + 10, area.top + 40, labelPaint);
+        // Draw "Buffer" label slightly above the box, using white paint
+        float bufferLabelY = area.top - 10; // Position slightly above the top edge
+        canvas.drawText("Buffer", area.left + 10, bufferLabelY, whiteLabelPaint);
+        
+        // Draw "Capacity" label inside the box, using black, bold paint
+        String capacityText = "Capacity: " + sharedBuffer.size() + " / " + GameManager.BUFFER_CAPACITY;
+        canvas.drawText(capacityText, 
+                       area.left + 10, area.top + 40, labelPaint); // Use labelPaint (black, bold)
 
         // Calculate dimensions for process circles in buffer
         float circleSpacing = 20;
@@ -932,14 +940,8 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
         arrowPaint.setStrokeWidth(3);
         arrowPaint.setStyle(Paint.Style.STROKE);
 
-        // Producer arrow (from CPU)
-        float arrowStartX = area.left;
-        float arrowY = area.top + area.height() / 2;
-        canvas.drawLine(arrowStartX, arrowY, arrowStartX + 40, arrowY, arrowPaint);
-        canvas.drawLine(arrowStartX + 30, arrowY - 10, arrowStartX + 40, arrowY, arrowPaint);
-        canvas.drawLine(arrowStartX + 30, arrowY + 10, arrowStartX + 40, arrowY, arrowPaint);
-
         // Consumer arrow (to clients)
+        float arrowY = area.top + area.height() / 2; // Define Y here
         float consumerArrowStartX = area.right - 40;
         canvas.drawLine(consumerArrowStartX, arrowY, area.right, arrowY, arrowPaint);
         canvas.drawLine(area.right - 10, arrowY - 10, area.right, arrowY, arrowPaint);
@@ -952,8 +954,9 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
         clientBgPaint.setColor(Color.LTGRAY);
         canvas.drawRect(area, clientBgPaint);
 
-        // Draw title
-        canvas.drawText("Clients", area.left + 10, area.top + 20, textPaint);
+        // Draw "Clients" label slightly above the box, using white paint
+        float clientLabelY = area.top - 10; // Position slightly above the top edge
+        canvas.drawText("Clients", area.left + 10, clientLabelY, whiteLabelPaint);
 
         // Setup paints for client states
         Paint idlePaint = new Paint();
