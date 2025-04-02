@@ -9,9 +9,9 @@ import java.util.Random;
 public class ProcessManager {
     private static final String TAG = "ProcessManager";
     private static final int MAX_QUEUE_CAPACITY = 10;
-    private static final double MIN_SPAWN_INTERVAL_S = 4.0;
-    private static final double MAX_SPAWN_INTERVAL_S = 8.0;
-    private static final double IO_PROCESS_PROBABILITY = 0.4; // 40%
+    private static final double MIN_SPAWN_INTERVAL = 4.0; // Minimum time between spawns
+    private static final double MAX_SPAWN_INTERVAL = 7.0; // Maximum time between spawns
+    private static final double IO_PROCESS_PROBABILITY = 0.3; // 30% chance for IO process
     private static final double BASE_PATIENCE_S = 15.0;
     private static final double MIN_CPU_TIME_S = 4.0;
     private static final double MAX_CPU_TIME_S = 8.0;
@@ -22,15 +22,18 @@ public class ProcessManager {
     // Controls rarity of high memory reqs (lower value = rarer)
     private static final double HIGH_MEMORY_PROBABILITY_FACTOR = 0.2;
 
-    private final Queue<Process> processQueue;
+    private double spawnTimer;
     private final Random random;
-    private double timeSinceLastSpawn = 0.0;
-    private double nextSpawnTime = 0.0; // Time until next spawn
+    private final Queue<Process> processQueue;
 
     public ProcessManager() {
-        this.processQueue = new LinkedList<>(); // Using LinkedList as a Queue
-        this.random = new Random();
-        scheduleNextSpawn();
+        random = new Random();
+        processQueue = new LinkedList<>();
+        resetSpawnTimer();
+    }
+
+    private void resetSpawnTimer() {
+        spawnTimer = MIN_SPAWN_INTERVAL + random.nextDouble() * (MAX_SPAWN_INTERVAL - MIN_SPAWN_INTERVAL);
     }
 
     /**
@@ -45,17 +48,11 @@ public class ProcessManager {
         updatePatienceCounters(deltaTime, onPatienceExpired);
 
         // 2. Check if it's time to spawn a new process
-        timeSinceLastSpawn += deltaTime;
-        if (timeSinceLastSpawn >= nextSpawnTime) {
-            if (processQueue.size() < MAX_QUEUE_CAPACITY) {
-                spawnProcess();
-                timeSinceLastSpawn = 0.0; // Reset timer
-                scheduleNextSpawn(); // Schedule the *next* one
-            } else {
-                 Log.d(TAG, "Queue full, delaying spawn.");
-                 // Optional: reschedule spawn check for a short delay instead of waiting full interval?
-                 // For now, just waits until next update tick after space frees up.
-            }
+        spawnTimer -= deltaTime;
+        
+        if (spawnTimer <= 0 && processQueue.size() < MAX_QUEUE_CAPACITY) {
+            spawnProcess();
+            resetSpawnTimer();
         }
     }
 
@@ -73,31 +70,29 @@ public class ProcessManager {
         }
     }
 
-    private void scheduleNextSpawn() {
-        nextSpawnTime = MIN_SPAWN_INTERVAL_S + (random.nextDouble() * (MAX_SPAWN_INTERVAL_S - MIN_SPAWN_INTERVAL_S));
-        Log.d(TAG, String.format("Next spawn scheduled in %.2f seconds", nextSpawnTime));
-    }
-
     private void spawnProcess() {
-        // Determine Process Type
+        if (processQueue.size() >= MAX_QUEUE_CAPACITY) return;
+
         boolean isIOProcess = random.nextDouble() < IO_PROCESS_PROBABILITY;
-
-        // Determine Parameters
-        int memory = generateMemoryRequirement();
-        double patience = BASE_PATIENCE_S; // Fixed for now, could be randomized
-        double cpuTime = MIN_CPU_TIME_S + (random.nextDouble() * (MAX_CPU_TIME_S - MIN_CPU_TIME_S));
-
         Process newProcess;
+        
         if (isIOProcess) {
-            double ioTime = MIN_IO_TIME_S + (random.nextDouble() * (MAX_IO_TIME_S - MIN_IO_TIME_S));
-            newProcess = new IOProcess(memory, patience, cpuTime, ioTime);
-             Log.i(TAG, "Spawning IOProcess: " + newProcess);
+            newProcess = new IOProcess(
+                4 + random.nextInt(5),  // Memory: 4-8 GB (increased from 3-6)
+                BASE_PATIENCE_S,        // Patience
+                3 + random.nextInt(4),  // CPU Time: 3-6 seconds
+                2 + random.nextInt(3)   // IO Time: 2-4 seconds
+            );
         } else {
-            newProcess = new Process(memory, patience, cpuTime);
-             Log.i(TAG, "Spawning Process: " + newProcess);
+            newProcess = new Process(
+                1 + random.nextInt(3),  // Memory: 1-3 GB (unchanged)
+                BASE_PATIENCE_S,        // Patience
+                2 + random.nextInt(3)   // CPU Time: 2-4 seconds
+            );
         }
-
-        processQueue.offer(newProcess); // Add to the end of the queue
+        
+        processQueue.offer(newProcess);
+        newProcess.setCurrentState(Process.ProcessState.IN_QUEUE);
     }
 
     private int generateMemoryRequirement() {

@@ -100,24 +100,27 @@ public class GameManager {
     public void update(double deltaTime) {
         if (!gameRunning) return;
 
-        // 1. Update Process Manager (Spawning and Patience in Queue)
+        // Update process spawning and queue
         processManager.update(deltaTime, this::handlePatienceExpired);
 
-        // 2. Update Cores (Process CPU timers, handle completion/IO trigger)
+        // Update buffer cooldowns
+        sharedBuffer.update(deltaTime);
+
+        // Update cores
         for (Core core : cpuCores) {
             core.update(deltaTime, this::handleCpuCompleted, this::handleIoRequired);
         }
 
-        // 3. Update IO Area (Process IO timers)
+        // Update IO Area
         ioArea.update(deltaTime, this::handleIoCompleted);
 
-        // 4. Buffer/Client updates happen in their own threads.
+        // Memory doesn't need update
+        // memory.update(); // Remove this line as Memory class doesn't have an update method
 
         // Check for game over condition
         if (health <= 0) {
             Log.wtf(TAG, "GAME OVER! Health reached zero.");
-            stopGame(); // Stop the game
-            // TODO: Handle game over state visually (e.g., show results screen)
+            stopGame();
         }
     }
 

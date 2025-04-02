@@ -4,17 +4,11 @@ import android.util.Log;
 
 import java.util.LinkedList;
 import java.util.Queue;
-import java.util.concurrent.locks.Condition;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
 
 public class SharedBuffer {
     private static final String TAG = "SharedBuffer";
     private final Queue<Process> buffer;
     private final int capacity;
-    private final Lock lock = new ReentrantLock();
-    private final Condition notFull = lock.newCondition();
-    private final Condition notEmpty = lock.newCondition();
 
     public SharedBuffer(int capacity) {
         this.capacity = capacity;
@@ -28,63 +22,72 @@ public class SharedBuffer {
      * @param process The completed process to add.
      * @throws InterruptedException if the thread is interrupted while waiting.
      */
-    public void put(Process process) throws InterruptedException {
-        lock.lock();
-        try {
-            while (buffer.size() == capacity) {
-                Log.d(TAG, "Buffer is full, waiting to put Process " + process.getId());
-                notFull.await(); // Wait until buffer is not full
-            }
-            buffer.offer(process);
-            process.setCurrentState(Process.ProcessState.IN_BUFFER);
-            Log.i(TAG, "Process " + process.getId() + " added to buffer. Size: " + buffer.size());
-            notEmpty.signal(); // Signal that the buffer is no longer empty
-        } finally {
-            lock.unlock();
+    public synchronized void put(Process process) throws InterruptedException {
+        while (buffer.size() >= capacity) {
+            Log.d(TAG, "Buffer full, waiting to put Process " + process.getId());
+            wait(); // Waits on this object's monitor
         }
+        Log.d(TAG, "Putting Process " + process.getId() + " into buffer.");
+        process.resetBufferCooldown(); // Reset cooldown when adding to buffer
+        buffer.offer(process);
+        notifyAll(); // Notifies threads waiting on this object's monitor (e.g., in take())
     }
 
     /**
-     * Takes a completed process from the buffer. Blocks if the buffer is empty.
+     * Takes a completed process from the buffer. Blocks if the buffer is empty or the head process is not ready.
      * Called by the consumers (Clients).
      * @return The process taken from the buffer.
      * @throws InterruptedException if the thread is interrupted while waiting.
      */
-    public Process take() throws InterruptedException {
-        lock.lock();
-        try {
-            while (buffer.isEmpty()) {
-                Log.d(TAG, "Buffer is empty, waiting to take process.");
-                notEmpty.await(); // Wait until buffer is not empty
+    public synchronized Process take() throws InterruptedException {
+        while (buffer.isEmpty() || !buffer.peek().isReadyForConsumption()) {
+            if (buffer.isEmpty()) {
+                 Log.d(TAG, "Buffer empty, waiting to take...");
+            } else {
+                 Log.d(TAG, "Buffer not empty, but head Process " + buffer.peek().getId() + " not ready (cooldown: " + buffer.peek().getBufferCooldownRemaining() + "), waiting...");
             }
-            Process process = buffer.poll();
-             Log.i(TAG, "Process " + process.getId() + " taken from buffer. Size: " + buffer.size());
-            notFull.signal(); // Signal that the buffer is no longer full
-            return process;
-        } finally {
-            lock.unlock();
+            wait(); // Waits on this object's monitor
         }
+        Process takenProcess = buffer.poll();
+        Log.d(TAG, "Taking Process " + takenProcess.getId() + " from buffer.");
+        // No need to notify here, as taking doesn't make it non-empty necessarily for others waiting on non-empty.
+        // notifyAll(); // This might be needed if put waits on non-full
+        return takenProcess;
     }
 
-    public int getCurrentSize() {
-        lock.lock();
-        try {
-            return buffer.size();
-        } finally {
-            lock.unlock();
-        }
+    /** Returns a snapshot of the processes currently in the buffer. */
+    public synchronized Process[] getProcessesInBuffer() {
+        Process[] processes = new Process[buffer.size()];
+        buffer.toArray(processes); // More efficient way to copy to array
+        return processes;
     }
 
-     public Queue<Process> getBufferQueue() { // Mostly for inspection/drawing
-         // Return a copy or handle synchronization if iterating externally
-         lock.lock();
-         try {
-             // Be cautious returning the raw queue if modification is possible elsewhere
-             // For read-only UI purposes, might be okay with external sync
-             // Or return Collections.unmodifiableQueue(new LinkedList<>(buffer));
-             return buffer; // Returning direct reference - requires careful handling externally
-         } finally {
-             lock.unlock();
-         }
-     }
+    /** Returns the current number of items in the buffer. */
+    public synchronized int size() {
+        return buffer.size();
+    }
+
+    /** Returns the total capacity of the buffer. */
+    public int getCapacity() {
+        return capacity;
+    }
+
+    /** Updates cooldowns and notifies waiting consumers if the head becomes ready. */
+    public synchronized void update(double deltaTime) {
+        boolean headWasReady = !buffer.isEmpty() && buffer.peek().isReadyForConsumption();
+
+        // Update cooldown for all processes in buffer
+        for (Process p : buffer) {
+            p.updateBufferCooldown(deltaTime);
+        }
+
+        // Check if the head became ready *after* updates
+        boolean headIsNowReady = !buffer.isEmpty() && buffer.peek().isReadyForConsumption();
+
+        // If the head wasn't ready before, but is ready now, notify waiting consumers
+        if (!headWasReady && headIsNowReady) {
+            Log.d(TAG, "Head Process " + buffer.peek().getId() + " became ready, notifying consumers.");
+            notifyAll();
+        }
+    }
 } 

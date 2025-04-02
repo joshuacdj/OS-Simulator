@@ -13,6 +13,7 @@ import android.util.Log;
 import android.view.MotionEvent;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
+import android.util.AttributeSet;
 
 import java.util.HashMap;
 import java.util.List;
@@ -49,6 +50,10 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
     private Paint memoryTextPaint; // Paint for memory text on processes
     private Paint clientIdlePaint;
     private Paint clientBusyPaint;
+    private final Paint queueAreaPaint;
+    private final Paint labelPaint;
+    private final Paint scorePaint;
+    private final Paint scoreBackgroundPaint;
 
     // --- Drag and Drop State ---
     private Process draggingProcess = null;
@@ -63,9 +68,12 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
     private Rect scoreHpAreaRect = new Rect();
     private Rect bufferAreaRect = new Rect();
     private Rect clientAreaRect = new Rect();
+    private RectF bufferArea = new RectF();
+    private RectF clientArea = new RectF();
     private Map<Integer, Rect> coreAreaRects = new HashMap<>();
     private Rect ioAreaRect = new Rect();
     private Map<Integer, Rect> queueProcessRects = new HashMap<>();
+    private SharedBuffer sharedBuffer;
 
     // --- Temporary Rects ---
     private Rect tempRect = new Rect();
@@ -81,12 +89,36 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
 
 
     public GameView(Context context) {
-        super(context);
+        this(context, null);
+    }
+
+    public GameView(Context context, AttributeSet attrs) {
+        super(context, attrs);
         getHolder().addCallback(this);
         setFocusable(true);
 
         gameManager = new GameManager();
+        sharedBuffer = gameManager.getSharedBuffer();
         initializePaints();
+
+        queueAreaPaint = new Paint();
+        queueAreaPaint.setStyle(Paint.Style.STROKE);
+        queueAreaPaint.setColor(Color.LTGRAY);
+        queueAreaPaint.setStrokeWidth(4f);
+        
+        labelPaint = new Paint();
+        labelPaint.setColor(Color.BLACK);
+        labelPaint.setTextSize(40f);
+        labelPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+        
+        scorePaint = new Paint();
+        scorePaint.setColor(Color.WHITE);
+        scorePaint.setTextSize(50f);
+        scorePaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+        
+        scoreBackgroundPaint = new Paint();
+        scoreBackgroundPaint.setColor(Color.rgb(50, 50, 50));
+        scoreBackgroundPaint.setStyle(Paint.Style.FILL);
 
         Log.i(TAG, "GameView created");
     }
@@ -484,13 +516,13 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
         
 
         // --- Draw Dynamic Elements ---
-        drawProcessQueue(canvas, processQueueAreaRect);
+        drawProcessQueue(canvas);
         drawScoreHealth(canvas, scoreHpAreaRect);
         drawMemory(canvas, memoryAreaRect);
         drawCores(canvas, coreAreaRects); 
         drawIOArea(canvas, ioAreaRect);
-        drawBuffer(canvas, bufferAreaRect);
-        drawClientArea(canvas, clientAreaRect);
+        drawBuffer(canvas);
+        drawClientArea(canvas);
 
          // --- Draw Drop Zone Highlights (if dragging) ---
          if (draggingProcess != null) {
@@ -563,46 +595,111 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
             float top = coreAreaTop + coreYSpacing + row * (coreHeight + coreYSpacing);
             coreAreaRects.put(i, new Rect((int)left, (int)top, (int)(left + coreWidth), (int)(top + coreHeight)));
         }
+
+        // Update RectF versions of the areas
+        bufferArea.set(bufferAreaRect);
+        clientArea.set(clientAreaRect);
     }
 
 
-    private void drawProcessQueue(Canvas canvas, Rect area) {
+    private void drawProcessQueue(Canvas canvas) {
+        // Define queue area dimensions
+        float queueLeft = 80;  // Increased margin from left
+        float queueTop = 120;  // Increased margin from top
+        float queueWidth = getWidth() * 0.15f;
+        float queueHeight = getHeight() * 0.7f;
+        
+        // Draw queue area border
+        RectF queueArea = new RectF(queueLeft, queueTop, queueLeft + queueWidth, queueTop + queueHeight);
+        canvas.drawRect(queueArea, queueAreaPaint);
+        
+        // Draw "Process Queue" label above the border
+        canvas.drawText("Process Queue", queueLeft, queueTop - 20, labelPaint);
+        
+        // Clear previous process rectangles
+        queueProcessRects.clear();
+        
         Queue<Process> queue = gameManager.getProcessManager().getProcessQueue();
         if (queue == null) return;
-
-        queueProcessRects.clear();
-
+        
+        // Calculate process dimensions
         int maxVisibleProcesses = 10;
-        int totalSpacing = (maxVisibleProcesses + 1) * 15;
-        int availableHeight = area.height() - 80 - totalSpacing;
-        processInQueueHeight = Math.max(20, availableHeight / (float)maxVisibleProcesses);
-        processInQueueWidth = area.width() - 40;
-        int startY = area.top + 80; 
-        int margin = 15;
-        int currentY = startY;
-
+        float processMargin = 15;
+        float availableHeight = queueHeight - processMargin * (maxVisibleProcesses + 1);
+        float processHeight = Math.max(20, availableHeight / maxVisibleProcesses);
+        float processWidth = queueWidth - 40;
+        
+        // Start drawing processes
+        float currentY = queueTop + processMargin;
+        
         synchronized (queue) {
             int index = 0;
             for (Process p : queue) {
                 if (index >= maxVisibleProcesses) break;
                 if (p == draggingProcess) {
-                     currentY += (int)processInQueueHeight + margin;
-                     index++;
+                    currentY += processHeight + processMargin;
+                    index++;
                     continue;
                 }
-
-                int top = currentY;
-                int bottom = currentY + (int)processInQueueHeight;
-                int left = area.left + 20;
-                int right = left + (int)processInQueueWidth;
-                tempRect.set(left, top, right, bottom);
-                queueProcessRects.put(p.getId(), new Rect(tempRect)); // Store Rect, not tempRect
-                drawProcessRepresentation(canvas, p, new RectF(tempRect)); // Draw using RectF
-
-                currentY += (int)processInQueueHeight + margin;
+                
+                RectF processRect = new RectF(
+                    queueLeft + 20,
+                    currentY,
+                    queueLeft + 20 + processWidth,
+                    currentY + processHeight
+                );
+                
+                // Store rectangle for touch detection
+                queueProcessRects.put(p.getId(), new Rect(
+                    (int)processRect.left,
+                    (int)processRect.top,
+                    (int)processRect.right,
+                    (int)processRect.bottom
+                ));
+                
+                // Draw the process
+                drawProcessRepresentation(canvas, p, processRect);
+                
+                currentY += processHeight + processMargin;
                 index++;
             }
         }
+    }
+
+    private void drawMemoryStatus(Canvas canvas) {
+        // Draw memory status in top-right corner with black bold text
+        String memText = String.format("MEM: %d / %d GB", 
+            gameManager.getMemory().getUsedMemory(),
+            gameManager.getMemory().getCapacity());
+        
+        float memX = getWidth() - 300;  // Fixed position from right
+        float memY = 60;  // Fixed Y position near top
+        
+        // Draw memory text
+        canvas.drawText(memText, memX, memY, labelPaint);
+    }
+
+    private void drawScore(Canvas canvas) {
+        String scoreText = "Score: " + gameManager.getScore();
+        float scoreX = 300;  // Fixed position from left
+        float scoreY = 60;   // Aligned with memory text
+        
+        // Draw score background
+        float padding = 20;
+        float textWidth = scorePaint.measureText(scoreText);
+        RectF scoreBackground = new RectF(
+            scoreX - padding,
+            scoreY - 40,
+            scoreX + textWidth + padding,
+            scoreY + 10
+        );
+        
+        // Draw background with slight transparency
+        scoreBackgroundPaint.setAlpha(200);
+        canvas.drawRoundRect(scoreBackground, 15, 15, scoreBackgroundPaint);
+        
+        // Draw score text
+        canvas.drawText(scoreText, scoreX, scoreY, scorePaint);
     }
 
     /** Overload to draw process in a specific RectF */
@@ -787,63 +884,117 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
          }
     }
 
-     private void drawBuffer(Canvas canvas, Rect area) {
-         SharedBuffer buffer = gameManager.getSharedBuffer();
-         Queue<Process> bufferQueue = buffer.getBufferQueue(); 
-         int bufferSize = buffer.getCurrentSize();
-         // Draw Text slightly higher to avoid overlap with processes
-         canvas.drawText("Size: " + bufferSize + " / " + GameManager.BUFFER_CAPACITY, area.left + 10, area.top + 30, textPaint);
+     private void drawBuffer(Canvas canvas) {
+        RectF area = bufferArea;
+        Paint bufferBgPaint = new Paint();
+        bufferBgPaint.setColor(Color.LTGRAY);
+        canvas.drawRect(area, bufferBgPaint);
 
-         // Visualize processes in buffer more clearly
-         float itemWidth = processInQueueWidth * 0.6f; // Smaller than in queue
-         float itemHeight = processInQueueHeight * 0.6f;
-         float spacing = 15f;
-         float startX = area.left + spacing;
-         float currentX = startX;
-         float y = area.centerY() - itemHeight/2;
+        // Draw title
+        canvas.drawText("Buffer", area.left + 10, area.top + 20, labelPaint);
+        canvas.drawText("Size: " + sharedBuffer.size() + " / " + GameManager.BUFFER_CAPACITY, 
+                       area.left + 10, area.top + 40, labelPaint);
 
-         synchronized (bufferQueue) { 
-             int count = 0;
-             for (Process p : bufferQueue) {
-                  tempRectF.set(currentX, y, currentX + itemWidth, y + itemHeight);
-                  if (tempRectF.right > area.right - spacing) break; // Stop if no more space
+        // Calculate dimensions for process circles in buffer
+        float circleSpacing = 20;
+        float circleRadius = 30;
+        float startX = area.left + circleRadius + 20;
+        float startY = area.top + 80;
 
-                  drawProcessRepresentation(canvas, p, tempRectF);
-                  currentX += itemWidth + spacing;
-                 count++;
-             }
-         }
+        // Draw processes in buffer
+        Process[] processes = sharedBuffer.getProcessesInBuffer();
+        for (int i = 0; i < processes.length; i++) {
+            if (processes[i] != null) {
+                float x = startX + (i * (circleRadius * 2 + circleSpacing));
+                
+                // Draw process circle with appropriate color
+                Paint processPaint = new Paint();
+                if (processes[i] instanceof IOProcess) {
+                    processPaint.setColor(Color.MAGENTA);
+                } else {
+                    processPaint.setColor(Color.CYAN);
+                }
+                canvas.drawCircle(x, startY, circleRadius, processPaint);
+
+                // Draw process ID
+                Paint idPaint = new Paint(textPaint);
+                idPaint.setTextSize(24);
+                idPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+                String processId = "P" + processes[i].getId();
+                canvas.drawText(processId, x - idPaint.measureText(processId) / 2, 
+                              startY + idPaint.getTextSize() / 3, idPaint);
+            }
+        }
+
+        // Draw arrows to indicate producer/consumer flow
+        Paint arrowPaint = new Paint();
+        arrowPaint.setColor(Color.BLACK);
+        arrowPaint.setStrokeWidth(3);
+        arrowPaint.setStyle(Paint.Style.STROKE);
+
+        // Producer arrow (from CPU)
+        float arrowStartX = area.left;
+        float arrowY = area.top + area.height() / 2;
+        canvas.drawLine(arrowStartX, arrowY, arrowStartX + 40, arrowY, arrowPaint);
+        canvas.drawLine(arrowStartX + 30, arrowY - 10, arrowStartX + 40, arrowY, arrowPaint);
+        canvas.drawLine(arrowStartX + 30, arrowY + 10, arrowStartX + 40, arrowY, arrowPaint);
+
+        // Consumer arrow (to clients)
+        float consumerArrowStartX = area.right - 40;
+        canvas.drawLine(consumerArrowStartX, arrowY, area.right, arrowY, arrowPaint);
+        canvas.drawLine(area.right - 10, arrowY - 10, area.right, arrowY, arrowPaint);
+        canvas.drawLine(area.right - 10, arrowY + 10, area.right, arrowY, arrowPaint);
     }
 
-     private void drawClientArea(Canvas canvas, Rect area) {
+    private void drawClientArea(Canvas canvas) {
+        RectF area = clientArea;
+        Paint clientBgPaint = new Paint();
+        clientBgPaint.setColor(Color.LTGRAY);
+        canvas.drawRect(area, clientBgPaint);
+
+        // Draw title
+        canvas.drawText("Clients", area.left + 10, area.top + 20, textPaint);
+
+        // Setup paints for client states
+        Paint idlePaint = new Paint();
+        idlePaint.setColor(Color.GRAY);
+        Paint busyPaint = new Paint();
+        busyPaint.setColor(Color.GREEN);
+        Paint textPaint = new Paint(this.textPaint);
+        textPaint.setTextSize(24);
+        textPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+
+        // Calculate dimensions for client boxes
+        float boxWidth = 120;
+        float boxHeight = 80;
+        float spacing = 30;
+        float startX = area.left + 20;
+        float startY = area.top + 40;
+
+        // Draw each client
         List<Client> clients = gameManager.getClients();
-        if (clients == null || clients.isEmpty()) return;
-
-        int numClients = clients.size();
-        float clientBoxHeight = area.height() / (numClients + 0.5f); // Add some padding
-        float clientBoxWidth = area.width() * 0.8f;
-        float x = area.centerX() - clientBoxWidth/2;
-        float startY = area.top + clientBoxHeight * 0.25f;
-        float spacing = clientBoxHeight * 0.2f;
-
-        for (int i = 0; i < numClients; i++) {
+        for (int i = 0; i < clients.size(); i++) {
             Client client = clients.get(i);
-            Process consumingProcess = client.getCurrentProcess();
-            float top = startY + i * (clientBoxHeight + spacing);
+            float x = startX + (i * (boxWidth + spacing));
+            RectF clientRect = new RectF(x, startY, x + boxWidth, startY + boxHeight);
 
-            Paint clientPaint = (consumingProcess != null) ? clientBusyPaint : clientIdlePaint;
-            tempRectF.set(x, top, x + clientBoxWidth, top + clientBoxHeight);
-            canvas.drawRect(tempRectF, clientPaint);
+            // Draw client box with state-dependent color
+            Paint boxPaint = client.isConsuming() ? busyPaint : idlePaint;
+            canvas.drawRect(clientRect, boxPaint);
 
-            String text;
-            if (consumingProcess != null) {
-                text = "Client " + client.getClientId() + ": P" + consumingProcess.getId();
-            } else {
-                text = "Client " + client.getClientId() + ": Idle";
+            // Draw client ID
+            String clientId = "Client " + client.getId();
+            float textX = clientRect.left + (boxWidth - textPaint.measureText(clientId)) / 2;
+            canvas.drawText(clientId, textX, clientRect.top + 30, textPaint);
+
+            // If client is consuming, draw process ID
+            if (client.isConsuming() && client.getCurrentProcess() != null) {
+                String processId = "P" + client.getCurrentProcess().getId();
+                float processTextX = clientRect.left + (boxWidth - textPaint.measureText(processId)) / 2;
+                canvas.drawText(processId, processTextX, clientRect.top + 60, textPaint);
             }
-            canvas.drawText(text, tempRectF.centerX(), tempRectF.centerY() + smallTextPaint.getTextSize()/3, smallTextPaint);
         }
-     }
+    }
 
      /**
       * Draws highlights on valid drop zones based on the currently dragged process.

@@ -4,6 +4,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class Process {
     private static final AtomicInteger idCounter = new AtomicInteger(0);
+    private static final double BUFFER_COOLDOWN = 1.5; // 1.5 seconds cooldown in buffer
 
     public enum ProcessState {
         IN_QUEUE,
@@ -22,6 +23,10 @@ public class Process {
     protected double remainingCpuTime; // CPU time left (seconds)
     protected boolean processCompleted; // Overall completion flag (after buffer)
     protected ProcessState currentState;
+    private double bufferCooldown = BUFFER_COOLDOWN;
+    private boolean readyForConsumption = false;
+    private double bufferCooldownRemainingS;
+
 
     // Potential fields for drawing - added later if needed
     // public float x, y;
@@ -71,6 +76,14 @@ public class Process {
         return currentState;
     }
 
+    public double getBufferCooldownProgress() {
+        return 1.0 - (bufferCooldown / BUFFER_COOLDOWN);
+    }
+
+    public double getBufferCooldownRemaining() {
+        return bufferCooldownRemainingS;
+    }
+
     // --- Setters / Modifiers ---
     public void setCurrentState(ProcessState newState) {
         this.currentState = newState;
@@ -110,7 +123,25 @@ public class Process {
          return true;
      }
 
-     // Maybe add pause/resume methods for CPUTimer later if needed for IO
+    public void updateBufferCooldown(double deltaTime) {
+        if (!readyForConsumption && bufferCooldown > 0) {
+            bufferCooldown -= deltaTime;
+            if (bufferCooldown <= 0) {
+                readyForConsumption = true;
+            }
+        }
+    }
+
+    public void resetBufferCooldown() {
+        bufferCooldown = BUFFER_COOLDOWN;
+        readyForConsumption = false;
+    }
+
+    public boolean isReadyForConsumption() {
+        return readyForConsumption;
+    }
+
+    // Maybe add pause/resume methods for CPUTimer later if needed for IO
 
     @Override
     public String toString() {
