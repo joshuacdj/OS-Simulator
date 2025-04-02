@@ -14,6 +14,7 @@ public class Client implements Runnable {
     private final GameManager gameManager; // To notify when consumption is done
     private final Random random;
     private volatile boolean running = true; // Use volatile for thread visibility
+    private volatile Process currentlyConsumingProcess = null; // Track current process
 
     public Client(int id, SharedBuffer buffer, GameManager gameManager) {
         this.clientId = id;
@@ -22,29 +23,39 @@ public class Client implements Runnable {
         this.random = new Random();
     }
 
+    // Add a getter for the view to check state
+    public Process getCurrentProcess() {
+        return currentlyConsumingProcess;
+    }
+
+    public int getClientId() {
+        return clientId;
+    }
+
     @Override
     public void run() {
         Log.i(TAG, "Client " + clientId + " started.");
         try {
             while (running) {
-                // 1. Take a process from the buffer (blocks if empty)
+                currentlyConsumingProcess = null; // Reset before taking
                 Process process = buffer.take();
-                Log.d(TAG, "Client " + clientId + " took Process " + process.getId());
+                currentlyConsumingProcess = process; // Set when starting consumption
 
-                // 2. Simulate consumption time
+                Log.d(TAG, "Client " + clientId + " took Process " + process.getId());
                 long consumeTime = MIN_CONSUME_TIME_MS + random.nextInt((int)(MAX_CONSUME_TIME_MS - MIN_CONSUME_TIME_MS + 1));
                 Thread.sleep(consumeTime);
 
-                // 3. Mark process as consumed and notify GameManager
                 process.setProcessCompleted(true);
                 process.setCurrentState(Process.ProcessState.CONSUMED);
                 Log.i(TAG, "Client " + clientId + " consumed Process " + process.getId() + " in " + consumeTime + "ms.");
                 gameManager.handleClientConsumed(process); // Notify GameManager
+                currentlyConsumingProcess = null; // Clear after consumption
             }
         } catch (InterruptedException e) {
             Log.w(TAG, "Client " + clientId + " interrupted.");
-            Thread.currentThread().interrupt(); // Preserve interrupt status
+            Thread.currentThread().interrupt();
         } finally {
+            currentlyConsumingProcess = null; // Ensure cleared on exit
             Log.i(TAG, "Client " + clientId + " stopped.");
         }
     }

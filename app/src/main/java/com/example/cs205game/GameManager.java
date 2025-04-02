@@ -17,7 +17,7 @@ public class GameManager {
     private static final int PROCESS_COMPLETION_SCORE = 20; // Example value
     private static final int NUM_CORES = 4;
     public static final int MEMORY_CAPACITY = 16;
-    private static final int BUFFER_CAPACITY = 5; // Example buffer size
+    public static final int BUFFER_CAPACITY = 5; // Example buffer size
     private static final int NUM_CLIENTS = 2; // Example number of clients
 
     private int score;
@@ -352,6 +352,11 @@ public class GameManager {
 
      public SharedBuffer getSharedBuffer() {
         return sharedBuffer;
+     }
+
+    // Add getter for clients
+     public List<Client> getClients() {
+         return clients;
      }
 
     // --- Private Helpers ---

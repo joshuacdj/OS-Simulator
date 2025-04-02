@@ -47,6 +47,8 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
     private Paint dropZoneHighlightPaint; // For highlighting valid drop zones
     private Paint errorFeedbackPaint; // For FCFS errors etc.
     private Paint memoryTextPaint; // Paint for memory text on processes
+    private Paint clientIdlePaint;
+    private Paint clientBusyPaint;
 
     // --- Drag and Drop State ---
     private Process draggingProcess = null;
@@ -183,6 +185,14 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
         memoryTextPaint.setAntiAlias(true);
         memoryTextPaint.setTextAlign(Paint.Align.CENTER);
         memoryTextPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+
+        clientIdlePaint = new Paint();
+        clientIdlePaint.setColor(Color.GRAY);
+        clientIdlePaint.setStyle(Paint.Style.FILL);
+
+        clientBusyPaint = new Paint();
+        clientBusyPaint.setColor(Color.parseColor("#81C784")); // Same as buffer for consistency?
+        clientBusyPaint.setStyle(Paint.Style.FILL);
     }
 
     @Override
@@ -781,28 +791,58 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
          SharedBuffer buffer = gameManager.getSharedBuffer();
          Queue<Process> bufferQueue = buffer.getBufferQueue(); 
          int bufferSize = buffer.getCurrentSize();
-         canvas.drawText("Size: " + bufferSize, area.left + 10, area.bottom - 10, textPaint);
+         // Draw Text slightly higher to avoid overlap with processes
+         canvas.drawText("Size: " + bufferSize + " / " + GameManager.BUFFER_CAPACITY, area.left + 10, area.top + 30, textPaint);
 
-         float itemRadius = 20f;
-         float startX = area.left + itemRadius * 2;
-         float y = area.centerY();
-         float spacing = itemRadius * 2.5f;
+         // Visualize processes in buffer more clearly
+         float itemWidth = processInQueueWidth * 0.6f; // Smaller than in queue
+         float itemHeight = processInQueueHeight * 0.6f;
+         float spacing = 15f;
+         float startX = area.left + spacing;
+         float currentX = startX;
+         float y = area.centerY() - itemHeight/2;
 
          synchronized (bufferQueue) { 
              int count = 0;
              for (Process p : bufferQueue) {
-                 float currentX = startX + count * spacing;
-                 if (currentX + itemRadius > area.right) break; // Don't draw outside bounds
-                 // Use RectF version for consistency
-                 tempRectF.set(currentX - itemRadius, y - itemRadius, currentX + itemRadius, y + itemRadius);
-                 drawProcessRepresentation(canvas, p, tempRectF);
+                  tempRectF.set(currentX, y, currentX + itemWidth, y + itemHeight);
+                  if (tempRectF.right > area.right - spacing) break; // Stop if no more space
+
+                  drawProcessRepresentation(canvas, p, tempRectF);
+                  currentX += itemWidth + spacing;
                  count++;
              }
          }
     }
 
      private void drawClientArea(Canvas canvas, Rect area) {
-        canvas.drawText("(Clients working)", area.left + 10, area.centerY(), textPaint);
+        List<Client> clients = gameManager.getClients();
+        if (clients == null || clients.isEmpty()) return;
+
+        int numClients = clients.size();
+        float clientBoxHeight = area.height() / (numClients + 0.5f); // Add some padding
+        float clientBoxWidth = area.width() * 0.8f;
+        float x = area.centerX() - clientBoxWidth/2;
+        float startY = area.top + clientBoxHeight * 0.25f;
+        float spacing = clientBoxHeight * 0.2f;
+
+        for (int i = 0; i < numClients; i++) {
+            Client client = clients.get(i);
+            Process consumingProcess = client.getCurrentProcess();
+            float top = startY + i * (clientBoxHeight + spacing);
+
+            Paint clientPaint = (consumingProcess != null) ? clientBusyPaint : clientIdlePaint;
+            tempRectF.set(x, top, x + clientBoxWidth, top + clientBoxHeight);
+            canvas.drawRect(tempRectF, clientPaint);
+
+            String text;
+            if (consumingProcess != null) {
+                text = "Client " + client.getClientId() + ": P" + consumingProcess.getId();
+            } else {
+                text = "Client " + client.getClientId() + ": Idle";
+            }
+            canvas.drawText(text, tempRectF.centerX(), tempRectF.centerY() + smallTextPaint.getTextSize()/3, smallTextPaint);
+        }
      }
 
      /**
