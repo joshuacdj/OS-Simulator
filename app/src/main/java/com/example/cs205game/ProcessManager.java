@@ -101,14 +101,17 @@ public class ProcessManager {
     }
 
     private int generateMemoryRequirement() {
-        // Simple approach: Bias towards lower numbers
-        // Could be more sophisticated (e.g., using exponential distribution)
-        if (random.nextDouble() < (1.0 - HIGH_MEMORY_PROBABILITY_FACTOR)) {
-            // Higher chance for lower memory (1-8)
-            return MIN_MEMORY_REQ + random.nextInt(8);
-        } else {
-            // Lower chance for higher memory (9-16)
-            return MIN_MEMORY_REQ + 8 + random.nextInt(MAX_MEMORY_REQ - 8);
+        // Tiered approach for memory generation
+        double roll = random.nextDouble();
+
+        if (roll < 0.60) { // 60% chance for 1-4 GB
+            return MIN_MEMORY_REQ + random.nextInt(4); // Generates 1, 2, 3, 4
+        } else if (roll < 0.90) { // 30% chance for 5-8 GB (0.60 to 0.899...)
+            return MIN_MEMORY_REQ + 4 + random.nextInt(4); // Generates 5, 6, 7, 8
+        } else if (roll < 0.98) { // 8% chance for 9-12 GB (0.90 to 0.979...)
+            return MIN_MEMORY_REQ + 8 + random.nextInt(4); // Generates 9, 10, 11, 12
+        } else { // 2% chance for 13-16 GB (0.98 to 0.999...)
+            return MIN_MEMORY_REQ + 12 + random.nextInt(4); // Generates 13, 14, 15, 16
         }
     }
 

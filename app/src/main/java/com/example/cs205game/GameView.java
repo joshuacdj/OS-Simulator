@@ -8,6 +8,7 @@ import android.graphics.Paint;
 import android.graphics.PointF;
 import android.graphics.Rect;
 import android.graphics.RectF;
+import android.graphics.Typeface;
 import android.util.Log;
 import android.view.MotionEvent;
 import android.view.SurfaceHolder;
@@ -45,6 +46,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
     private Paint patienceRedPaint;
     private Paint dropZoneHighlightPaint; // For highlighting valid drop zones
     private Paint errorFeedbackPaint; // For FCFS errors etc.
+    private Paint memoryTextPaint; // Paint for memory text on processes
 
     // --- Drag and Drop State ---
     private Process draggingProcess = null;
@@ -145,9 +147,10 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
 
         smallTextPaint = new Paint();
         smallTextPaint.setColor(Color.BLACK);
-        smallTextPaint.setTextSize(20f); // Smaller for IDs inside processes
+        smallTextPaint.setTextSize(20f);
         smallTextPaint.setAntiAlias(true);
         smallTextPaint.setTextAlign(Paint.Align.CENTER);
+        smallTextPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
 
         memoryCellPaint = new Paint();
         memoryCellPaint.setColor(Color.GRAY);
@@ -174,6 +177,12 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
         errorFeedbackPaint.setColor(Color.argb(150, 255, 0, 0)); // Semi-transparent red
         errorFeedbackPaint.setStyle(Paint.Style.FILL);
 
+        memoryTextPaint = new Paint();
+        memoryTextPaint.setColor(Color.BLACK);
+        memoryTextPaint.setTextSize(24f);
+        memoryTextPaint.setAntiAlias(true);
+        memoryTextPaint.setTextAlign(Paint.Align.CENTER);
+        memoryTextPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
     }
 
     @Override
@@ -590,15 +599,30 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
     private void drawProcessRepresentation(Canvas canvas, Process p, RectF bounds) {
          // Select paint based on process type
          Paint bodyPaint = (p instanceof IOProcess) ? ioProcessPaint : processPaint;
-         canvas.drawOval(bounds, bodyPaint);
 
-         // Draw ID Text centered
+         // Calculate center and radius for a circle within the bounds
+         float centerX = bounds.centerX();
+         float centerY = bounds.centerY();
+         float radius = Math.min(bounds.width(), bounds.height()) / 2f;
+
+         // Draw Circle
+         canvas.drawCircle(centerX, centerY, radius, bodyPaint);
+
+         // Draw ID Text centered (adjust Y offset based on radius/text size)
          String idText = "P" + p.getId();
-         canvas.drawText(idText, bounds.centerX(), bounds.centerY() + smallTextPaint.getTextSize() / 3, smallTextPaint);
+         float idPct = 0.3f; // Position ID 30% down from center
+         canvas.drawText(idText, centerX, centerY - radius * idPct + smallTextPaint.getTextSize() / 3, smallTextPaint);
+
+         // Draw Memory Requirement Text below ID
+         String memText = p.getMemoryRequirement() + "GB";
+         float memPct = 0.3f; // Position Mem 30% up from center
+         canvas.drawText(memText, centerX, centerY + radius * memPct + memoryTextPaint.getTextSize() / 3, memoryTextPaint);
 
          // Draw patience arc IF in queue
          if (p.getCurrentState() == Process.ProcessState.IN_QUEUE) {
-             drawPatienceArc(canvas, p, bounds);
+              // Create a square RectF centered within the original bounds for the arc
+              tempRectF.set(centerX - radius, centerY - radius, centerX + radius, centerY + radius);
+              drawPatienceArc(canvas, p, tempRectF); // Pass the square bounds
          }
     }
 
@@ -608,7 +632,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
         drawProcessRepresentation(canvas, p, tempRectF);
     }
 
-    private void drawPatienceArc(Canvas canvas, Process p, RectF processBounds) {
+    private void drawPatienceArc(Canvas canvas, Process p, RectF circleBounds) { // Bounds are now the circle bounds
         float sweepAngle = 360f * (float)(p.getPatienceCounter() / p.getInitialPatience());
         Paint patiencePaint;
         double patienceRatio = p.getPatienceCounter() / p.getInitialPatience();
@@ -620,9 +644,10 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
         } else {
             patiencePaint = patienceRedPaint;
         }
-        float padding = 10f;
-        tempRectF.set(processBounds.left - padding, processBounds.top - padding,
-                     processBounds.right + padding, processBounds.bottom + padding);
+        float padding = 10f; // Padding outside the circle
+        // Use the circleBounds directly for the arc RectF calculation
+        tempRectF.set(circleBounds.left - padding, circleBounds.top - padding,
+                     circleBounds.right + padding, circleBounds.bottom + padding);
         canvas.drawArc(tempRectF, -90, sweepAngle, false, patiencePaint);
     }
 
@@ -652,32 +677,35 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
         int cellsPerRow = 4; // 4x4 grid
         int numRows = 4;
 
-        // Calculate cell size based on the smaller dimension to ensure square-ish cells
-        float availableWidth = area.width();
-        float availableHeight = area.height();
-        float cellWidth = availableWidth / cellsPerRow;
-        float cellHeight = availableHeight / numRows;
-        float cellSize = Math.min(cellWidth, cellHeight) * 0.8f; // Use 80% and make square
-        float totalGridWidth = cellSize * cellsPerRow;
-        float totalGridHeight = cellSize * numRows;
-        float startX = area.left + (availableWidth - totalGridWidth) / 2;
-        float startY = area.top + (availableHeight - totalGridHeight) / 2;
+        // Calculate cell size based on the drawing area
+        float cellWidth = (float)area.width() / cellsPerRow;
+        float cellHeight = (float)area.height() / numRows;
+        // No extra margins, fill the whole area
+        float startX = area.left;
+        float startY = area.top;
 
         int usedCells = gameManager.getMemory().getUsedMemory();
 
         for (int i = 0; i < totalCells; i++) {
             int row = i / cellsPerRow;
             int col = i % cellsPerRow;
-            float left = startX + col * cellSize;
-            float top = startY + row * cellSize;
-            float right = left + cellSize;
-            float bottom = top + cellSize;
+            float left = startX + col * cellWidth;
+            float top = startY + row * cellHeight;
+            float right = left + cellWidth;
+            float bottom = top + cellHeight;
 
             if (i < usedCells) {
                  canvas.drawRect(left, top, right, bottom, memoryUsedPaint);
             }
-            canvas.drawRect(left, top, right, bottom, memoryCellPaint);
+            // Draw border slightly inset for better visibility
+            canvas.drawRect(left + 1, top + 1, right - 1, bottom - 1, memoryCellPaint);
         }
+
+        // Optionally draw total used/available text somewhere nearby
+        String memUsageText = "MEM: " + usedCells + " / " + totalCells + " GB";
+        float textWidth = textPaint.measureText(memUsageText);
+        // Draw text below the grid, centered horizontally within the memory area
+        canvas.drawText(memUsageText, area.centerX() - textWidth / 2, area.bottom + textPaint.getTextSize() + 5, textPaint);
     }
 
     private void drawCores(Canvas canvas, Map<Integer, Rect> coreRectsMap) {
