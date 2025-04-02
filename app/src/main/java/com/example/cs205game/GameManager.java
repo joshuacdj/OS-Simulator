@@ -34,6 +34,9 @@ public class GameManager {
     // Add references for UI updates later (e.g., GameView)
 
     public GameManager() {
+        // Reset static process ID counter at the start of a new game manager instance
+        Process.resetIdCounter(); 
+
         this.score = 0;
         this.health = INITIAL_HEALTH;
         this.memory = new Memory(MEMORY_CAPACITY);
@@ -373,6 +376,10 @@ public class GameManager {
          return clients;
      }
 
+    public boolean isGameRunning() {
+        return gameRunning;
+    }
+
     // --- Private Helpers ---
     private synchronized void decreaseHealth(int amount) {
         if (!gameRunning) return;
@@ -389,6 +396,29 @@ public class GameManager {
         this.score += amount;
         Log.i(TAG, "Score increased by " + amount + ". Current score: " + this.score);
         // TODO: Update Score UI
+    }
+
+    public void resetGame() {
+        stopGame(); // Ensure existing threads are stopped before resetting
+        
+        // Reset core game state variables
+        health = INITIAL_HEALTH;
+        score = 0;
+        gameRunning = true; 
+        
+        // Clear components
+        processManager.reset(); 
+        sharedBuffer.clear(); // Need to add a clear method to SharedBuffer
+        ioArea.clear();       // Need to add a clear method to IOArea
+        for (Core core : cpuCores) {
+            core.clear();     // Need to add a clear method to Core
+        }
+        memory.clear();       // Need to add a clear method to Memory
+        
+        // Restart client threads and game logic
+        startGame(); 
+        
+        Log.i(TAG, "Game state reset.");
     }
 
 } 

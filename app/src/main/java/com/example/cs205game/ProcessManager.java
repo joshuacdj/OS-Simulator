@@ -25,6 +25,7 @@ public class ProcessManager {
     private double spawnTimer;
     private final Random random;
     private final Queue<Process> processQueue;
+    private int nextProcessId = 1; // Added to track process IDs
 
     public ProcessManager() {
         random = new Random();
@@ -133,4 +134,11 @@ public class ProcessManager {
          return head != null && head.getId() == processId;
      }
 
+    /** Resets the process manager, clearing the queue and resetting spawn timer. */
+    public synchronized void reset() {
+        processQueue.clear();
+        resetSpawnTimer();
+        nextProcessId = 1; // Reset process ID counter
+        Log.d(TAG, "ProcessManager reset.");
+    }
 } 

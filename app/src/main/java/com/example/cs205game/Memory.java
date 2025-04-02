@@ -64,4 +64,10 @@ public class Memory {
         }
          Log.d(TAG, "Freed " + memoryToFree + "GB. Available: " + availableMemory);
     }
+
+    /** Resets memory usage to zero. */
+    public synchronized void clear() {
+        availableMemory = capacity; // Reset available memory to full capacity
+        Log.d(TAG, "Memory cleared.");
+    }
 } 

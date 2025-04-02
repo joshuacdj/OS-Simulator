@@ -6,6 +6,11 @@ public class Process {
     private static final AtomicInteger idCounter = new AtomicInteger(0);
     private static final double BUFFER_COOLDOWN = 1.5; // 1.5 seconds cooldown in buffer
 
+    /** Static method to reset the global ID counter. Call this when starting a new game. */
+    public static void resetIdCounter() {
+        idCounter.set(0);
+    }
+
     public enum ProcessState {
         IN_QUEUE,
         ON_CORE,

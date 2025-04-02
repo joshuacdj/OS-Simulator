@@ -90,4 +90,10 @@ public class SharedBuffer {
             notifyAll();
         }
     }
+
+    /** Clears the buffer of all processes. */
+    public synchronized void clear() {
+        buffer.clear();
+        Log.d(TAG, "SharedBuffer cleared.");
+    }
 } 

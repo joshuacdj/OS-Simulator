@@ -6,13 +6,14 @@ public class IOArea {
     private static final String TAG = "IOArea";
     private IOProcess currentProcess = null;
     private boolean isBusy = false;
+    private double remainingIoTimeS = 0;
 
     public IOProcess getCurrentProcess() {
         return currentProcess;
     }
 
-    public boolean isBusy() {
-        return isBusy;
+    public synchronized boolean isBusy() {
+        return currentProcess != null;
     }
 
     /**
@@ -66,5 +67,12 @@ public class IOArea {
             // The process's internal state (isIoCompleted) is already set.
             onIoCompleted.accept(currentProcess); // Notify GameManager/View that it's ready to be moved back
         }
+    }
+
+    /** Clears the IO area, removing any current process. */
+    public synchronized void clear() {
+        currentProcess = null;
+        remainingIoTimeS = 0;
+        Log.d(TAG, "IOArea cleared.");
     }
 } 

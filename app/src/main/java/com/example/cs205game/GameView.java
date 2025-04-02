@@ -14,6 +14,7 @@ import android.view.MotionEvent;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.util.AttributeSet;
+import android.app.Activity;
 
 import java.util.HashMap;
 import java.util.List;
@@ -55,6 +56,16 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
     private final Paint scorePaint;
     private final Paint scoreBackgroundPaint;
     private final Paint whiteLabelPaint; // New paint for white labels
+
+    // --- Game Over State ---
+    private boolean isGameOver = false;
+    private RectF retryButtonRect = new RectF();
+    private RectF quitButtonRect = new RectF();
+    private Paint gameOverOverlayPaint;
+    private Paint gameOverPanelPaint;
+    private Paint gameOverTextPaint;
+    private Paint buttonPaint;
+    private Paint buttonTextPaint;
 
     // --- Drag and Drop State ---
     private Process draggingProcess = null;
@@ -127,6 +138,30 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
         whiteLabelPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD)); // Same style
 
         Log.i(TAG, "GameView created");
+
+        // Game Over Paints
+        gameOverOverlayPaint = new Paint();
+        gameOverOverlayPaint.setColor(Color.argb(180, 0, 0, 0)); // Semi-transparent black
+
+        gameOverPanelPaint = new Paint();
+        gameOverPanelPaint.setColor(Color.DKGRAY);
+        gameOverPanelPaint.setStyle(Paint.Style.FILL);
+
+        gameOverTextPaint = new Paint();
+        gameOverTextPaint.setColor(Color.RED);
+        gameOverTextPaint.setTextSize(100f);
+        gameOverTextPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+        gameOverTextPaint.setTextAlign(Paint.Align.CENTER);
+
+        buttonPaint = new Paint();
+        buttonPaint.setColor(Color.GRAY);
+        buttonPaint.setStyle(Paint.Style.FILL);
+
+        buttonTextPaint = new Paint();
+        buttonTextPaint.setColor(Color.WHITE);
+        buttonTextPaint.setTextSize(50f);
+        buttonTextPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+        buttonTextPaint.setTextAlign(Paint.Align.CENTER);
     }
 
     private void initializePaints() {
@@ -276,6 +311,35 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
         float y = event.getY();
         int action = event.getAction();
 
+        // Handle Game Over screen interactions first if active
+        if (isGameOver) {
+            if (action == MotionEvent.ACTION_DOWN) { // Check for tap start
+                if (retryButtonRect.contains(x, y)) {
+                    Log.i(TAG, "Retry button tapped - Restarting Activity.");
+                    // Restart the GameActivity
+                    Context context = getContext();
+                    if (context instanceof Activity) {
+                        ((Activity) context).recreate();
+                    } else {
+                         Log.e(TAG, "Context is not an Activity, cannot restart.");
+                    }
+                    return true; // Consume the event
+                } else if (quitButtonRect.contains(x, y)) {
+                    Log.i(TAG, "Quit button tapped.");
+                    // Implement actual quit logic (e.g., navigate back to title or finish)
+                    Context context = getContext();
+                    if (context instanceof Activity) {
+                        ((Activity) context).finish(); // Close the current activity
+                    } else {
+                         Log.e(TAG, "Context is not an Activity, cannot finish.");
+                    }
+                    return true; // Consume the event
+                }
+            }
+            return true; // Consume all touch events while game over overlay is shown
+        }
+
+        // --- Existing Touch Handling for Gameplay ---
         switch (action) {
             case MotionEvent.ACTION_DOWN:
                 draggingProcess = findDraggableProcessAt(x, y);
@@ -491,7 +555,14 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
     }
 
     public void update(double deltaTime) {
-        gameManager.update(deltaTime);
+        if (!isGameOver) { // Only update game logic if not game over
+            gameManager.update(deltaTime);
+            // Check if game over condition is met *after* updating game state
+            if (!gameManager.isGameRunning()) {
+                isGameOver = true;
+                Log.i(TAG, "Game Over condition detected in GameView update.");
+            }
+        }
     }
 
     
@@ -534,9 +605,58 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
              // Use the stored bounds which are updated during move
             drawProcessRepresentation(canvas, draggingProcess, draggingProcessBounds);
         }
+
+        // --- Draw Game Over Overlay (if applicable) ---
+        if (isGameOver) {
+            drawGameOverOverlay(canvas);
+        }
     }
 
-    
+    private void drawGameOverOverlay(Canvas canvas) {
+        int width = getWidth();
+        int height = getHeight();
+
+        // Draw semi-transparent overlay covering the whole screen
+        canvas.drawRect(0, 0, width, height, gameOverOverlayPaint);
+
+        // Define panel dimensions (centered)
+        float panelWidth = width * 0.6f;
+        float panelHeight = height * 0.4f;
+        float panelLeft = (width - panelWidth) / 2f;
+        float panelTop = (height - panelHeight) / 2f;
+        RectF panelRect = new RectF(panelLeft, panelTop, panelLeft + panelWidth, panelTop + panelHeight);
+
+        // Draw panel background
+        canvas.drawRoundRect(panelRect, 20f, 20f, gameOverPanelPaint); // Rounded corners
+
+        // Draw "GAME OVER" text
+        float textX = panelRect.centerX();
+        float textY = panelRect.top + panelHeight * 0.3f; // Position towards the top
+        canvas.drawText("GAME OVER", textX, textY, gameOverTextPaint);
+
+        // Define button dimensions
+        float buttonWidth = panelWidth * 0.4f;
+        float buttonHeight = panelHeight * 0.2f;
+        float buttonSpacing = panelWidth * 0.1f;
+        float buttonY = panelRect.top + panelHeight * 0.6f; // Position lower down
+
+        // Calculate button positions
+        float retryLeft = panelRect.left + buttonSpacing;
+        retryButtonRect.set(retryLeft, buttonY, retryLeft + buttonWidth, buttonY + buttonHeight);
+
+        float quitLeft = panelRect.right - buttonSpacing - buttonWidth;
+        quitButtonRect.set(quitLeft, buttonY, quitLeft + buttonWidth, buttonY + buttonHeight);
+
+        // Draw buttons
+        canvas.drawRoundRect(retryButtonRect, 10f, 10f, buttonPaint);
+        canvas.drawRoundRect(quitButtonRect, 10f, 10f, buttonPaint);
+
+        // Draw button text (centered)
+        float buttonTextY = retryButtonRect.centerY() + buttonTextPaint.getTextSize() / 3f;
+        canvas.drawText("Retry", retryButtonRect.centerX(), buttonTextY, buttonTextPaint);
+        canvas.drawText("Quit", quitButtonRect.centerX(), buttonTextY, buttonTextPaint);
+    }
+
     private void calculateLayoutRects(int width, int height) {
         // Adjust layout calculations slightly for better spacing
         int queueWidth = width / 5;

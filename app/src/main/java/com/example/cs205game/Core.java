@@ -119,4 +119,15 @@ public class Core {
             }
         }
     }
+
+    /** Clears the core, removing any current process. */
+    public synchronized void clear() {
+        currentProcess = null;
+        isUtilized = false;
+        Log.d("Core_" + coreId, "Cleared.");
+    }
+
+    public synchronized String getState() {
+        return "Core " + coreId + ": " + (isUtilized ? "Utilized" : "Free");
+    }
 } 
