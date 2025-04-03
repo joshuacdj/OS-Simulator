@@ -12,20 +12,19 @@ public class ProcessManager {
     private static final double MIN_SPAWN_INTERVAL = 3.0; // Minimum time between spawns
     private static final double MAX_SPAWN_INTERVAL = 5.0; // Maximum time between spawns
     private static final double IO_PROCESS_PROBABILITY = 0.3; // 30% chance for IO process
-    private static final double BASE_PATIENCE_S = 15.0;
-    private static final double MIN_CPU_TIME_S = 4.0;
-    private static final double MAX_CPU_TIME_S = 8.0;
-    private static final double MIN_IO_TIME_S = 3.0; // Example IO time range
-    private static final double MAX_IO_TIME_S = 6.0; // Example IO time range
-    private static final int MIN_MEMORY_REQ = 1;
-    private static final int MAX_MEMORY_REQ = 16;
-    // Controls rarity of high memory reqs (lower value = rarer)
-    private static final double HIGH_MEMORY_PROBABILITY_FACTOR = 0.2;
+    private static final double BASE_PATIENCE_S = 15.0; // Base patience for processes
+    private static final double MIN_CPU_TIME_S = 4.0; // Minimum CPU time
+    private static final double MAX_CPU_TIME_S = 8.0; // Maximum CPU time
+    private static final double MIN_IO_TIME_S = 3.0; // Minimum IO time
+    private static final double MAX_IO_TIME_S = 6.0; // Maximum IO time
+    private static final int MIN_MEMORY_REQ = 1; // Minimum memory requirement
+    private static final int MAX_MEMORY_REQ = 16; // Maximum memory requirement
+    private static final double HIGH_MEMORY_PROBABILITY_FACTOR = 0.2; // Controls rarity of high memory reqs
 
-    private double spawnTimer;
-    private final Random random;
-    private final Queue<Process> processQueue;
-    private int nextProcessId = 1; // Added to track process IDs
+    private double spawnTimer; // Timer for spawning processes
+    private final Random random; // Random number generator
+    private final Queue<Process> processQueue; // Queue of processes
+    private int nextProcessId = 1; // Next process ID
 
     public ProcessManager() {
         random = new Random();
@@ -33,8 +32,9 @@ public class ProcessManager {
         resetSpawnTimer();
     }
 
+    /** Resets the spawn timer to a random value between MIN_SPAWN_INTERVAL and MAX_SPAWN_INTERVAL. */
     private void resetSpawnTimer() {
-        spawnTimer = MIN_SPAWN_INTERVAL + random.nextDouble() * (MAX_SPAWN_INTERVAL - MIN_SPAWN_INTERVAL);
+        spawnTimer = MIN_SPAWN_INTERVAL + random.nextDouble() * (MAX_SPAWN_INTERVAL - MIN_SPAWN_INTERVAL); 
     }
 
     /**
@@ -57,6 +57,12 @@ public class ProcessManager {
         }
     }
 
+    /**
+     * Updates the patience counters for all processes in the queue.
+     * Removes processes whose patience has run out.
+     * @param deltaTime Time elapsed since the last update in seconds.
+     * @param onPatienceExpired A callback to handle processes whose patience runs out.
+     */
     private void updatePatienceCounters(double deltaTime, java.util.function.Consumer<Process> onPatienceExpired) {
         // Using an iterator to safely remove elements while iterating
         java.util.Iterator<Process> iterator = processQueue.iterator();
@@ -71,6 +77,11 @@ public class ProcessManager {
         }
     }
 
+    /**
+     * Spawns a new process.
+     * Determines if the process is an IO process based on a random roll.
+     * Creates a new Process object with the appropriate parameters.
+     */
     private void spawnProcess() {
         if (processQueue.size() >= MAX_QUEUE_CAPACITY) return;
 
@@ -96,17 +107,22 @@ public class ProcessManager {
         newProcess.setCurrentState(Process.ProcessState.IN_QUEUE);
     }
 
+    /**
+     * Generates a memory requirement for a new process.
+     * Uses a tiered approach to determine the memory requirement.
+     * @return The generated memory requirement.
+     */
     private int generateMemoryRequirement() {
         // Tiered approach for memory generation
         double roll = random.nextDouble();
 
         if (roll < 0.60) { // 60% chance for 1-4 GB
             return MIN_MEMORY_REQ + random.nextInt(4); // Generates 1, 2, 3, 4
-        } else if (roll < 0.90) { // 30% chance for 5-8 GB (0.60 to 0.899...)
+        } else if (roll < 0.90) { // 30% chance for 5-8 GB (0.60 to 0.899)
             return MIN_MEMORY_REQ + 4 + random.nextInt(4); // Generates 5, 6, 7, 8
-        } else if (roll < 0.98) { // 8% chance for 9-12 GB (0.90 to 0.979...)
+        } else if (roll < 0.98) { // 8% chance for 9-12 GB (0.90 to 0.979..)
             return MIN_MEMORY_REQ + 8 + random.nextInt(4); // Generates 9, 10, 11, 12
-        } else { // 2% chance for 13-16 GB (0.98 to 0.999...)
+        } else { // 2% chance for 13-16 GB (0.98 to 0.999)
             return MIN_MEMORY_REQ + 12 + random.nextInt(4); // Generates 13, 14, 15, 16
         }
     }

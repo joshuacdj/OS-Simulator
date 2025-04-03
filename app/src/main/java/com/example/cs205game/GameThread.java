@@ -4,16 +4,23 @@ import android.graphics.Canvas;
 import android.util.Log;
 import android.view.SurfaceHolder;
 
+/**
+ * dedicated thread for running the main game loop.
+ * handles timing, updates game state via gameview, and triggers drawing.
+ * aims for a target fps and includes delta time capping for smoother updates.
+ */
 public class GameThread extends Thread {
-    private static final String TAG = "GameThread";
-    private static final int TARGET_FPS = 60; // Target updates per second
-    private static final long OPTIMAL_TIME_NS = 1_000_000_000 / TARGET_FPS; // Target time per frame in nanoseconds
-    private static final double MAX_DELTA_TIME_S = 1.0 / 30.0; // Cap delta time to prevent large jumps (e.g., at 30fps equivalent)
+    private static final String TAG = "GameThread"; // log tag
+    private static final int TARGET_FPS = 60; // target frames per second
+    // target time per frame in nanoseconds for fps calculation
+    private static final long OPTIMAL_TIME_NS = 1_000_000_000 / TARGET_FPS; 
+    // max delta time to prevent huge jumps if frame takes too long (e.g 30fps equivalent)
+    private static final double MAX_DELTA_TIME_S = 1.0 / 30.0; 
 
-    private final SurfaceHolder surfaceHolder;
-    private final GameView gameView; // Reference to the view for drawing and updating
-    private volatile boolean running = false;
-    private long lastLoopTimeNs = 0; // Use nanoTime
+    private final SurfaceHolder surfaceHolder; // handle to the drawing surface
+    private final GameView gameView; // reference to the view for drawing and updating
+    private volatile boolean running = false; // flag to control the loop
+    private long lastLoopTimeNs = 0; // tracks time of the last loop iteration
 
     public GameThread(SurfaceHolder holder, GameView view) {
         super();
@@ -25,70 +32,77 @@ public class GameThread extends Thread {
         this.running = isRunning;
     }
 
+    // the main game loop
     @Override
     public void run() {
         Log.i(TAG, "Game thread starting...");
         long loopStartTimeNs;
         long elapsedTimeNs;
         long sleepTimeNs;
-        lastLoopTimeNs = System.nanoTime(); // Initialize with nanoTime before loop
+        lastLoopTimeNs = System.nanoTime(); // initialize time before loop
 
         while (running) {
-            loopStartTimeNs = System.nanoTime();
+            loopStartTimeNs = System.nanoTime(); // time at the start of this loop
             
-            // Calculate delta time in seconds using nanoTime
+            // calculate time elapsed since last loop in seconds
             double deltaTime = (loopStartTimeNs - lastLoopTimeNs) / 1_000_000_000.0;
             lastLoopTimeNs = loopStartTimeNs;
             
-            // Cap delta time to prevent large jumps on frame drops/stalls
+            // cap delta time prevents large jumps if theres a lag spike
             deltaTime = Math.min(deltaTime, MAX_DELTA_TIME_S);
 
             Canvas canvas = null;
             try {
+                // lock the canvas for drawing
                 canvas = this.surfaceHolder.lockCanvas();
+                // synchronize drawing/updating on the surface holder 
+                // ensures surface isn't destroyed mid-draw
                 synchronized (surfaceHolder) {
-                    // Update game state using capped delta time
+                    // update game state using the calculated (and capped) delta time
                     this.gameView.update(deltaTime);
 
-                    // Draw the canvas on the panel
+                    // draw the current game state to the canvas
                     if (canvas != null) {
                         this.gameView.drawGame(canvas);
                     }
                 }
             } catch (Exception e) {
+                // log errors during the game loop
                 Log.e(TAG, "Error during game loop", e);
             } finally {
+                // always ensure we unlock the canvas
                 if (canvas != null) {
                     try {
                         surfaceHolder.unlockCanvasAndPost(canvas);
                     } catch (Exception e) {
+                        // log errors during unlock too
                         Log.e(TAG, "Error unlocking canvas", e);
                     }
                 }
             }
 
-            // Calculate loop time and sleep if necessary (using nanoTime)
+            // calculate how long the loop took
             elapsedTimeNs = System.nanoTime() - loopStartTimeNs;
+            // calculate how long we need to wait to hit target fps
             sleepTimeNs = OPTIMAL_TIME_NS - elapsedTimeNs;
 
+            // if we have time left sleep to save battery/cpu and maintain fps
             if (sleepTimeNs > 0) {
                 try {
-                    // Use TimeUnit for potentially more accurate nano sleep, though Thread.sleep uses ms
-                    // For simplicity, converting ns to ms for Thread.sleep
+                    // convert ns to ms and remaining ns for thread.sleep
                     long sleepTimeMs = sleepTimeNs / 1_000_000;
-                    long sleepTimeNsRemainder = sleepTimeNs % 1_000_000;
-                    // Thread.sleep takes ms and optionally ns (0-999999)
-                    // Only use sleep if ms part > 0, handle very short sleeps carefully
-                    if (sleepTimeMs > 0 || sleepTimeNsRemainder > 0) { 
-                        Thread.sleep(sleepTimeMs, (int)sleepTimeNsRemainder); 
-                    } 
+                    int sleepTimeNsRemainder = (int)(sleepTimeNs % 1_000_000);
+                    
+                    // sleep the thread
+                    Thread.sleep(sleepTimeMs, sleepTimeNsRemainder); 
                     
                 } catch (InterruptedException e) {
+                    // thread interrupted probably shutting down
                     Log.w(TAG, "Thread interrupted while sleeping", e);
-                    Thread.currentThread().interrupt(); // Preserve interrupt status
-                    running = false; // Stop loop if interrupted
+                    running = false; // stop the loop
+                    Thread.currentThread().interrupt(); // set interrupt flag
                 }
-            } // else: Frame took longer than optimal time, don't sleep
+            } // else: frame took longer than optimal time no need to sleep
         }
         Log.i(TAG, "Game thread stopped.");
     }

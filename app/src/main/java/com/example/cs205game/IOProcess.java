@@ -58,6 +58,21 @@ public class IOProcess extends Process {
          return true; // IO still running or not in IO state
      }
 
+    /**
+     * checks if the process has reached the point where its cpu execution
+     * should be interrupted for i/o.
+     * assumes i/o interrupt happens at or below the halfway point of cpu time.
+     * @return true if i/o interrupt is due, false otherwise.
+     */
+    public boolean needsIOInterrupt() {
+        // check if cpu is already paused or io is already done
+        if (cpuPausedForIO || ioCompleted) {
+            return false;
+        }
+        // check if remaining cpu time is at or past the halfway mark
+        return remainingCpuTime <= (cpuTimer / 2.0);
+    }
+
     @Override
     public String toString() {
         return "IOProcess{" +

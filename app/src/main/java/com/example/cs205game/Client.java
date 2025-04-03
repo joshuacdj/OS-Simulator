@@ -3,7 +3,7 @@ package com.example.cs205game;
 import android.util.Log;
 
 public class Client implements Runnable {
-    private static final String TAG = "Client";
+    private static final String TAG = "client";
     private static final long CONSUMPTION_DELAY_MS = 2000; // 2 second delay for consumption
     
     private final int id;
@@ -11,7 +11,6 @@ public class Client implements Runnable {
     private final GameManager gameManager;
     private volatile boolean running = true;
     private volatile Process currentlyConsumingProcess = null;
-    private volatile boolean isConsuming = false;
 
     public Client(int id, SharedBuffer buffer, GameManager gameManager) {
         this.id = id;
@@ -23,33 +22,32 @@ public class Client implements Runnable {
     public void run() {
         while (running) {
             try {
-                // Try to take a process from the buffer
+                // block until a ready process is available in the shared buffer
                 Process process = buffer.take();
+                // check if thread is still running after potentially blocking
                 if (process != null && running) {
-                    currentlyConsumingProcess = process;
-                    isConsuming = true;
-                    
-                    // Simulate consumption time
+                    currentlyConsumingProcess = process; // track the process being consumed
+
+                    // simulate consumption time/work
                     Thread.sleep(CONSUMPTION_DELAY_MS);
-                    
-                    // Process consumed
+
+                    // check if still running after sleep
                     if (running) {
-                        // Notify GameManager about consumption completion
-                        // This might involve score updates, removing from UI, etc.
+                        // notify gamemanager that consumption is complete
                         gameManager.handleClientConsumed(id, process);
                     }
-                    currentlyConsumingProcess = null;
-                    isConsuming = false;
+                    currentlyConsumingProcess = null; // clear current process
                 }
             } catch (InterruptedException e) {
-                Log.w(TAG, "Client " + id + " interrupted while consuming.");
-                Thread.currentThread().interrupt();
-                break;
+                Log.w(TAG, "client " + id + " interrupted.");
+                running = false; // stop running if interrupted
+                Thread.currentThread().interrupt(); // preserve interrupt status
             }
         }
-        Log.i(TAG, "Client " + id + " stopped.");
+        Log.i(TAG, "client " + id + " stopped.");
     }
 
+    /** signals the client thread to stop its loop. */
     public void stop() {
         running = false;
     }
@@ -58,11 +56,13 @@ public class Client implements Runnable {
         return id;
     }
 
+    /** returns the process currently being consumed, or null if idle. */
     public Process getCurrentProcess() {
         return currentlyConsumingProcess;
     }
 
+    /** returns true if the client is currently busy consuming a process. */
     public boolean isConsuming() {
-        return isConsuming;
+        return currentlyConsumingProcess != null; // derive state directly from process object
     }
 } 

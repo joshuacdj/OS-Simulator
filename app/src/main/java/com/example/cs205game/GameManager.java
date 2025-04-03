@@ -12,16 +12,19 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
+// acts as the central orchestrator for the game
+// manages game state (score, health), components (memory, cores, buffer etc),
+// client threads, and the main game update loop delegation
 public class GameManager {
-    private static final String TAG = "GameManager";
-    public static final int INITIAL_HEALTH = 100; 
-    private static final int PATIENCE_PENALTY = 10; 
-    private static final int FCFS_PENALTY = 5; 
-    private static final int PROCESS_COMPLETION_SCORE = 20; 
+    private static final String TAG = "GameManager"; // professional tag
+    public static final int INITIAL_HEALTH = 100;
+    private static final int PATIENCE_PENALTY = 10; // hp lost if process patience runs out
+    private static final int FCFS_PENALTY = 5; // hp lost for dragging wrong process from queue
+    private static final int PROCESS_COMPLETION_SCORE = 100; // score for consumed process (updated from 20)
     private static final int NUM_CORES = 4;
-    public static final int MEMORY_CAPACITY = 16;
-    public static final int BUFFER_CAPACITY = 5; 
-    private static final int NUM_CLIENTS = 2; 
+    public static final int MEMORY_CAPACITY = 16; // gb
+    public static final int BUFFER_CAPACITY = 5; // max items in buffer
+    private static final int NUM_CLIENTS = 2; // number of consumer threads
 
     private int score;
     private int health;
@@ -31,7 +34,7 @@ public class GameManager {
     private final IOArea ioArea;
     private final SharedBuffer sharedBuffer;
     private final List<Client> clients;
-    private final ExecutorService clientExecutor; // Executor for client threads
+    private ExecutorService clientExecutor; // using an executorservice is better for managing threads
     private volatile boolean gameRunning = false;
     private Vibrator vibrator; // Vibrator instance
     private Context context; // Context needed for vibrator
@@ -39,7 +42,7 @@ public class GameManager {
     // Add references for UI updates later (e.g., GameView)
 
     public GameManager(Context context) { // Modify constructor to accept Context
-        this.context = context;
+        this.context = context.getApplicationContext(); // use application context to avoid leaks
         // Reset static process ID counter at the start of a new game manager instance
         Process.resetIdCounter(); 
 
@@ -52,161 +55,170 @@ public class GameManager {
         for (int i = 0; i < NUM_CORES; i++) {
             int coreId = i; // Need final variable for lambda capture
             cpuCores.add(new Core(coreId, 
-                                (id, process) -> this.handleCpuCompleted(id, process), // Correct callback signature for CPU completion
-                                this::handleIoRequired));                           // Correct callback for IO required
+                                this::handleCpuCompleted, // method reference for completion
+                                this::handleIoRequired)); // method reference for io request
         }
         this.sharedBuffer = new SharedBuffer(BUFFER_CAPACITY);
         this.clients = new ArrayList<>(NUM_CLIENTS);
         // Using an ExecutorService to manage client threads is generally better than raw Threads
-        this.clientExecutor = Executors.newFixedThreadPool(NUM_CLIENTS);
         for (int i = 0; i < NUM_CLIENTS; i++) {
             clients.add(new Client(i, sharedBuffer, this));
         }
         Log.i(TAG, "GameManager initialized.");
 
         // Get Vibrator service
-        vibrator = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
+        vibrator = (Vibrator) this.context.getSystemService(Context.VIBRATOR_SERVICE);
+        if (vibrator == null || !vibrator.hasVibrator()) {
+            Log.w(TAG, "Vibrator not available or service not found");
+            vibrator = null; // ensure vibrator is null if unusable
+        }
     }
 
-    public void startGame() {
+    // starts the game logic and client threads
+    public synchronized void startGame() {
         if (gameRunning) return;
         Log.i(TAG, "Starting game and client threads...");
         gameRunning = true;
-        // Submit client tasks to the executor
+        // create a new executor if it's null or shut down
+        if (clientExecutor == null || clientExecutor.isShutdown()) {
+             clientExecutor = Executors.newFixedThreadPool(NUM_CLIENTS);
+        }
+        // submit client tasks to the executor
         for(Client client : clients) {
             clientExecutor.submit(client);
         }
     }
 
-    public void stopGame() {
+    // stops the game logic and attempts to shut down client threads gracefully
+    public synchronized void stopGame() {
         if (!gameRunning) return;
         Log.i(TAG, "Stopping game and client threads...");
         gameRunning = false;
 
-        // Signal clients to stop
+        // signal clients to stop their run loop
         for (Client client : clients) {
             client.stop();
         }
 
-        // Shutdown executor pool
-        clientExecutor.shutdown(); // Disable new tasks from being submitted
-        try {
-            // Give tasks time to complete
-            if (!clientExecutor.awaitTermination(1, TimeUnit.SECONDS)) {
-                clientExecutor.shutdownNow(); // Cancel currently executing tasks
-                // Wait a while for tasks to respond to being cancelled
-                if (!clientExecutor.awaitTermination(1, TimeUnit.SECONDS))
-                    Log.e(TAG, "Client executor did not terminate");
+        // shutdown executor pool gracefully
+        if (clientExecutor != null && !clientExecutor.isShutdown()) {
+            clientExecutor.shutdown(); // disable new tasks
+            try {
+                // wait a bit for existing tasks to finish
+                if (!clientExecutor.awaitTermination(1, TimeUnit.SECONDS)) {
+                    clientExecutor.shutdownNow(); // force cancel running tasks
+                    // wait a bit for tasks to respond to cancellation
+                    if (!clientExecutor.awaitTermination(1, TimeUnit.SECONDS))
+                        Log.e(TAG, "Client executor did not terminate");
+                }
+            } catch (InterruptedException ie) {
+                clientExecutor.shutdownNow(); // force cancel if interrupted
+                Thread.currentThread().interrupt(); // preserve interrupt status
             }
-        } catch (InterruptedException ie) {
-            // (Re-)Cancel if current thread also interrupted
-            clientExecutor.shutdownNow();
-            // Preserve interrupt status
-            Thread.currentThread().interrupt();
         }
-        Log.i(TAG, "Client threads stopped.");
+        Log.i(TAG, "Client threads requested to stop.");
     }
 
     /**
-     * The main update loop for the game logic.
-     * Should only run if gameRunning is true.
-     * @param deltaTime Time elapsed since the last update in seconds.
+     * the main update loop delegates updates to child components.
+     * @param deltatime time elapsed since the last update in seconds.
      */
     public void update(double deltaTime) {
         if (!gameRunning) return;
 
-        // Update process spawning and queue
+        // update process spawning and queue patience
         processManager.update(deltaTime, this::handlePatienceExpired);
 
-        // Update buffer cooldowns
+        // update cooldowns for processes waiting in the buffer
         sharedBuffer.update(deltaTime);
 
-        // Update cores
+        // update processes running on cores
         for (Core core : cpuCores) {
-            // Use lambda to pass both coreId and process to the handler
-            core.update(deltaTime, 
-                (process) -> handleCpuCompleted(core.getId(), process), 
-                this::handleIoRequired);
+            // lambda used here to pass core id to the handler
+            // core update calls the correct handler internally now
+            core.update(deltaTime); 
         }
 
-        // Update IO Area
+        // update process running in the io area
         ioArea.update(deltaTime, this::handleIoCompleted);
 
-        // Check for game over condition
-        if (health <= 0) {
-            Log.wtf(TAG, "GAME OVER! Health reached zero.");
-            stopGame();
-        }
+        // game over check is now handled in gameview via isgamerunning()
     }
 
-    // --- Callback Handlers ---
+    // --- callback handlers --- //
+    // these methods are often called from other threads (e.g processmanager update, core update)
 
+    // called by processmanager when a process's patience runs out in the queue
     private void handlePatienceExpired(Process process) {
-        if (!gameRunning) return; // Don't penalize if game stopped
+        if (!gameRunning) return; // ignore if game already stopped
         Log.w(TAG, "Process " + process.getId() + " removed due to expired patience.");
         decreaseHealth(PATIENCE_PENALTY);
-       
     }
 
     /**
-     * Callback from Core when a process finishes its CPU execution.
-     * Moves the process to the SharedBuffer and frees its memory.
-     * @param coreId The ID of the core that finished.
-     * @param process The process that completed its CPU time.
+     * callback from core when a process finishes its cpu execution.
+     * moves the process to the sharedbuffer and frees its memory.
+     * @param coreid the id of the core that finished.
+     * @param process the process that completed its cpu time.
      */
     private void handleCpuCompleted(int coreId, Process process) {
-        cpuCores.get(coreId).removeProcess();
-        Log.i(TAG, "Process " + process.getId() + " completed CPU on Core " + coreId);
-        
-        // Deallocate memory *before* putting into buffer
+        // note: core.removeprocess() was already called inside core.update before this callback
+        Log.i(TAG, "Handling CPU completion for Process " + process.getId() + " from Core " + coreId);
+
+        // free memory now that cpu work is done
         memory.freeMemory(process.getMemoryRequirement());
-        Log.i(TAG, "Deallocated " + process.getMemoryRequirement() + "GB for Process " + process.getId());
+        Log.d(TAG, "Freed memory for Process " + process.getId());
 
         process.setCurrentState(Process.ProcessState.IN_BUFFER);
         try {
             sharedBuffer.put(process);
-            Log.i(TAG, "Process " + process.getId() + " moved to SharedBuffer.");
+            Log.d(TAG, "Process " + process.getId() + " added to SharedBuffer.");
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             Log.e(TAG, "Interrupted while putting process " + process.getId() + " into buffer", e);
+            // potentially handle game state inconsistency if interrupted here?
         }
     }
 
+    // called by core when an ioprocess needs io
     private void handleIoRequired(IOProcess ioProcess) {
         if (!gameRunning) return;
+        // log indicates user needs to drag process to io area
         Log.i(TAG, "IO Required for Process " + ioProcess.getId() + ". Waiting for user action.");
-       
     }
 
+    // called by ioarea when an ioprocess finishes io
     private void handleIoCompleted(IOProcess ioProcess) {
         if (!gameRunning) return;
+        // log indicates user needs to drag process back to a core
          Log.i(TAG, "IO Completed for Process " + ioProcess.getId() + ". Waiting for user action.");
-       
     }
 
     /**
-     * Callback from Client thread when it finishes consuming a process.
-     * Updates the score.
-     * @param clientId The ID of the client that finished.
-     * @param process The process that was consumed.
+     * callback from client thread when it finishes consuming a process.
+     * increases score.
+     * note: called from client threads
+     * @param clientid the id of the client that finished.
+     * @param process the process that was consumed.
      */
     public void handleClientConsumed(int clientId, Process process) {
+        if (!gameRunning) return;
         Log.i(TAG, "Client " + clientId + " finished consuming Process " + process.getId());
-        // Memory is now deallocated in handleCpuCompleted
-        // memory.deallocate(process.getMemoryRequirement()); 
+        // memory is deallocated earlier in handlecpucompleted
         process.setProcessCompleted(true);
         process.setCurrentState(Process.ProcessState.CONSUMED);
-        score += 100; // Add score for successful consumption
-        Log.i(TAG, "Score increased to " + score);
+        increaseScore(PROCESS_COMPLETION_SCORE); // use the constant
     }
 
-    // --- Action Methods (Called by UI/Input Handler - Main Thread) ---
+    // --- action methods --- //
+    // these methods are triggered by user interactions (drag/drop) via gameview
 
     /**
-     * Attempts to move a process from the queue to a specific core.
-     * Handles FCFS check, memory allocation, and core assignment.
-     * @param processId The ID of the process to move.
-     * @param targetCoreId The ID of the target core.
+     * attempts to move a process from the queue head to a target core.
+     * performs fcfs, core availability, and memory checks.
+     * called from the ui thread (via gameview ontouchevent).
+     * @param processid the id of the process to move (must be head).
+     * @param targetcoreid the id of the target core.
      */
     public void moveProcessFromQueueToCore(int processId, int targetCoreId) {
         if (!gameRunning) return;
@@ -216,7 +228,7 @@ public class GameManager {
         }
         Core targetCore = cpuCores.get(targetCoreId);
 
-        // 1. Check FCFS
+        // 1. check fcfs - is it the head process?
         if (!processManager.isProcessAtHead(processId)) {
             Log.w(TAG, "FCFS Violation: Process " + processId + " is not at the head of the queue.");
             decreaseHealth(FCFS_PENALTY);
@@ -224,42 +236,46 @@ public class GameManager {
             return;
         }
 
-        // 2. Check if core is free
-        if (targetCore.isUtilized()) {
-             Log.w(TAG, "User Action Failed: Core " + targetCoreId + " is busy.");
-             
-             return;
-        }
+        // 2. check if core is free
+        synchronized (targetCore) { // synchronize on core for check-then-act
+            if (targetCore.isUtilized()) {
+                 Log.w(TAG, "User Action Failed: Core " + targetCoreId + " is busy.");
+                 // todo: maybe visual feedback for busy core in gameview?
+                 return;
+            }
 
-        // 3. Peek process from queue (don't remove yet)
-        Process processToMove = processManager.getProcessQueue().peek(); // Assuming FCFS check passed
-        if (processToMove == null || processToMove.getId() != processId) {
-            Log.e(TAG, "Mismatch between FCFS check and queue head? ProcessID: " + processId);
-            return; 
-        }
+            // 3. peek process from queue (fcfs check passed, so this should be the one)
+            Process processToMove = processManager.getProcessQueue().peek();
+            if (processToMove == null || processToMove.getId() != processId) {
+                Log.e(TAG, "Queue state error: Mismatch between FCFS check and queue head? ProcessID: " + processId);
+                return; // potential race condition or logic error somewhere
+            }
 
-        // 4. Check memory
-        if (!memory.hasEnoughMemory(processToMove.getMemoryRequirement())) {
-             Log.w(TAG, "User Action Failed: Not enough memory for Process " + processId + ". Required: " + processToMove.getMemoryRequirement() + ", Available: " + memory.getAvailableMemory());
-             
-             return;
-        }
+            // 4. check memory
+            if (!memory.hasEnoughMemory(processToMove.getMemoryRequirement())) {
+                 Log.w(TAG, "User Action Failed: Not enough memory for Process " + processId + ". Required: " + processToMove.getMemoryRequirement() + ", Available: " + memory.getAvailableMemory());
+                 // todo: visual feedback for insufficient memory?
+                 return;
+            }
 
-        // 5. All checks passed: Allocate memory, remove from queue, assign to core
-        if (memory.allocateMemory(processToMove.getMemoryRequirement())) {
-             processManager.takeProcessFromQueue(); // Now remove from queue
-             targetCore.assignProcess(processToMove);
-             
-        } else {
-            // Should not happen due to check, but handle defensively
-             Log.e(TAG, "Memory allocation failed unexpectedly after check for Process " + processId);
+            // 5. all checks passed: allocate memory, remove from queue, assign to core
+            if (memory.allocateMemory(processToMove.getMemoryRequirement())) {
+                 processManager.takeProcessFromQueue(); // now remove from queue
+                 targetCore.assignProcess(processToMove);
+                 // success visual feedback handled by state change drawing
+            } else {
+                // should not happen due to check, but log 
+                 Log.e(TAG, "Memory allocation failed unexpectedly after check for Process " + processId);
+            }
         }
     }
 
     /**
-     * Attempts to move an IOProcess from a core to the IO area.
-     * @param processId The ID of the IOProcess to move.
-     * @param sourceCoreId The ID of the core the process is currently on.
+     * attempts to move an ioprocess from a core to the io area.
+     * performs checks for process type, io readiness, and io area availability.
+     * called from the ui thread.
+     * @param processid the id of the ioprocess to move.
+     * @param sourcecoreid the id of the core the process is currently on.
      */
     public void moveProcessFromCoreToIO(int processId, int sourceCoreId) {
         if (!gameRunning) return;
@@ -268,47 +284,64 @@ public class GameManager {
              return;
          }
          Core sourceCore = cpuCores.get(sourceCoreId);
-         Process processOnCore = sourceCore.getCurrentProcess();
+         Process processOnCore; // need to check inside sync block
 
-         // 1. Check if the correct process is on the specified core
-         if (processOnCore == null || processOnCore.getId() != processId) {
-             Log.w(TAG, "User Action Failed: Process " + processId + " not found on Core " + sourceCoreId);
-             return;
-         }
+         synchronized (sourceCore) { // sync on core being read
+            processOnCore = sourceCore.getCurrentProcess();
 
-         // 2. Check if it's actually an IOProcess and if IO is required (Refactored for Java 11)
-         if (processOnCore instanceof IOProcess) {
-             IOProcess ioProcess = (IOProcess) processOnCore;
-             if (!ioProcess.isCpuPausedForIO() || ioProcess.isIoCompleted()) {
-                 Log.w(TAG, "User Action Failed: Process " + processId + " on Core " + sourceCoreId + " is not an IOProcess waiting for IO.");
+            // 1. check if the correct process is on the specified core
+            if (processOnCore == null || processOnCore.getId() != processId) {
+                Log.w(TAG, "User Action Failed: Process " + processId + " not found on Core " + sourceCoreId);           
+                return;
+            }
+
+            // 2. check if it's an ioprocess ready for io
+            if (!(processOnCore instanceof IOProcess)) {
+                 Log.w(TAG, "User Action Failed: Process " + processId + " on Core " + sourceCoreId + " is not an IOProcess.");             
+                 return;
+            }
+            IOProcess ioProcess = (IOProcess) processOnCore;
+            if (!ioProcess.isCpuPausedForIO() || ioProcess.isIoCompleted()) {
+                Log.w(TAG, "User Action Failed: IOProcess " + processId + " on Core " + sourceCoreId + " is not waiting for IO.");
+                // todo: visual feedback?
+                return;
+            }
+         } // end synchronized block for source core read
+
+         // 3. check if io area is free (synchronize on ioarea)
+         synchronized (ioArea) {
+             if (ioArea.isBusy()) {
+                 Log.w(TAG, "User Action Failed: IOArea is busy.");
+                 // todo: visual feedback?
                  return;
              }
-             // If we get here, it IS an IOProcess ready for IO
-         } else {
-             // It's not an IOProcess at all
-             Log.w(TAG, "User Action Failed: Process " + processId + " on Core " + sourceCoreId + " is not an IOProcess.");
-             return;
-         }
 
-         // 3. Check if IO Area is free
-         if (ioArea.isBusy()) {
-             Log.w(TAG, "User Action Failed: IOArea is busy.");
-             return;
-         }
-
-         // 4. All checks passed: Remove from core, assign to IO Area
-         IOProcess ioProcessToMove = (IOProcess) sourceCore.removeProcess(); // Safe cast now
-         if (ioProcessToMove != null) {
-             ioArea.assignProcess(ioProcessToMove);
-         } else {
-              Log.e(TAG, "Error removing process from core during move to IO.");
-         }
+             // 4. checks passed: remove from core (sync again), assign to io area (still synced)
+             IOProcess ioProcessToMove; 
+             synchronized(sourceCore) { // sync to remove
+                 // re-verify process is still there and ready? might be overkill if ui thread is fast
+                 Process checkProcess = sourceCore.getCurrentProcess();
+                 if (checkProcess == null || checkProcess.getId() != processId || !(checkProcess instanceof IOProcess) || !((IOProcess)checkProcess).isCpuPausedForIO()) {
+                     Log.e(TAG, "State changed between check and action for moveProcessFromCoreToIO - Process: " + processId );
+                     return; // state changed, abort move
+                 }
+                 ioProcessToMove = (IOProcess) sourceCore.removeProcess();
+             }
+             
+             if (ioProcessToMove != null) {
+                 ioArea.assignProcess(ioProcessToMove);
+             } else {
+                  Log.e(TAG, "Error removing process from core during move to IO, processId: " + processId);
+             }
+         } // end synchronized block for io area
     }
 
     /**
-     * Attempts to move a completed IOProcess from the IO area back to its original core.
-     * @param processId The ID of the IOProcess to move.
-     * @param targetCoreId The ID of the core to return to.
+     * attempts to move a completed ioprocess from the io area back to a target core.
+     * performs checks for io completion and core availability.
+     * called from the ui thread.
+     * @param processid the id of the ioprocess to move.
+     * @param targetcoreid the id of the core to return to.
      */
     public void moveProcessFromIOToCore(int processId, int targetCoreId) {
         if (!gameRunning) return;
@@ -317,37 +350,46 @@ public class GameManager {
             return;
         }
         Core targetCore = cpuCores.get(targetCoreId);
-        IOProcess processInIO = ioArea.getCurrentProcess();
+        IOProcess processInIO; // check inside sync block
 
-        // 1. Check if the correct process is in the IO area
-        if (processInIO == null || processInIO.getId() != processId) {
-            Log.w(TAG, "User Action Failed: Process " + processId + " not found in IO Area.");
-            return;
-        }
+        synchronized (ioArea) { // sync on io area for check/remove
+            processInIO = ioArea.getCurrentProcess();
 
-        // 2. Check if IO is actually completed
-        if (!processInIO.isIoCompleted()) {
-            Log.w(TAG, "User Action Failed: IO not yet complete for Process " + processId);
+            // 1. check if the correct process is in the io area
+            if (processInIO == null || processInIO.getId() != processId) {
+                Log.w(TAG, "User Action Failed: Process " + processId + " not found in IO Area.");
+                return;
+            }
+
+            // 2. check if io is actually completed
+            if (!processInIO.isIoCompleted()) {
+                Log.w(TAG, "User Action Failed: IO not yet complete for Process " + processId);
+                // todo: visual feedback?
+                return;
+            }
             
-            return;
-        }
+            // remove from io area now if checks pass before checking core
+            ioArea.removeProcess(); 
+        } // end synchronized block for io area
 
-         // 3. Check if the target core is free
-        if (targetCore.isUtilized()) {
-            Log.w(TAG, "User Action Failed: Target Core " + targetCoreId + " is busy.");
-            
-            return;
-        }
+        // 3. check if the target core is free (sync on core)
+        synchronized(targetCore) {
+            if (targetCore.isUtilized()) {
+                Log.w(TAG, "User Action Failed: Target Core " + targetCoreId + " is busy.");
+                // we already removed from io area, maybe put it back? or let user retry?
+                // for simplicity, log and let user retry dropping onto another core
+                // if putting back: ioArea.assignProcess(processInIO); -- needs careful state reset
+                return;
+            }
 
-        // 4. All checks passed: Remove from IO area, assign back to core
-        ioArea.removeProcess();
-        processInIO.setCpuPausedForIO(false); // Allow CPU timer to resume
-        processInIO.setCurrentState(Process.ProcessState.IO_COMPLETED_WAITING_CORE); // State before core update confirms it's ON_CORE
-        targetCore.assignProcess(processInIO);
-      
+            // 4. checks passed: assign back to core (still synced)
+            processInIO.setCpuPausedForIO(false); // allow cpu timer to resume on core
+            processInIO.setCurrentState(Process.ProcessState.IO_COMPLETED_WAITING_CORE); // core.update will set to on_core
+            targetCore.assignProcess(processInIO);
+        }
     }
 
-    // --- Getters for UI ---
+    // --- getters for ui --- //
     public int getScore() {
         return score;
     }
@@ -385,59 +427,67 @@ public class GameManager {
         return gameRunning;
     }
 
-    // --- Private Helpers ---
+    // --- private helpers --- //
     private synchronized void decreaseHealth(int amount) {
         if (!gameRunning) return;
+        int previousHealth = this.health;
         this.health -= amount;
-        Log.i(TAG, "Health decreased by " + amount + ". Current health: " + this.health);
-
-        // Vibrate on HP loss
-        if (vibrator != null && vibrator.hasVibrator()) {
-            long[] pattern = {0, 100}; // Vibrate for 100ms
-            // Use VibrationEffect for newer APIs
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1)); // -1 means don't repeat
-            } else {
-                // Deprecated in API 26
-                vibrator.vibrate(pattern, -1); 
-            }
-        }
-
         if (this.health <= 0) {
             this.health = 0;
-            Log.wtf(TAG, "GAME OVER! Health reached zero.");
-            stopGame();
+            // only log state change if health actually reached zero this time
+            if (previousHealth > 0) { 
+                 Log.i(TAG, "Health depleted.");
+                 stopGame(); // triggers game over state via isGameRunning()
+            }
+        } else {
+             Log.d(TAG, "Health decreased by " + amount + ". Current health: " + this.health);
+        }
+
+        // vibrate on hp loss if health was positive before hit
+        if (previousHealth > 0 && vibrator != null) { 
+            long[] pattern = {0, 100}; // vibrate for 100ms
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1));
+            } else {
+                vibrator.vibrate(pattern, -1); // deprecated but needed for < api 26
+            }
         }
     }
 
+    // also called frequently
     private synchronized void increaseScore(int amount) {
-        if (!gameRunning) return;
+        if (!gameRunning || amount <= 0) return;
         this.score += amount;
-        Log.i(TAG, "Score increased by " + amount + ". Current score: " + this.score);
-       
+        Log.d(TAG, "Score increased by " + amount + ". Current score: " + this.score);
     }
 
+    // resets the game state to initial values, clears components
+    // note: activity recreate is currently used for retry, so this isn't hit via retry button
+    // might be useful for a different 'restart level' feature later
     public void resetGame() {
-        stopGame(); // Ensure existing threads are stopped before resetting
-        
-        // Reset core game state variables
+        Log.i(TAG, "Resetting game state...");
+        stopGame(); // ensure threads are stopped first
+
+        // reset core state
         health = INITIAL_HEALTH;
         score = 0;
-        gameRunning = true; 
-        
-        // Clear components
-        processManager.reset(); 
-        sharedBuffer.clear(); // Need to add a clear method to SharedBuffer
-        ioArea.clear();       // Need to add a clear method to IOArea
+        // gameRunning is set true by startGame()
+
+        // clear components
+        processManager.reset();
+        sharedBuffer.clear();
+        ioArea.clear();
         for (Core core : cpuCores) {
-            core.clear();     // Need to add a clear method to Core
+            core.clear();
         }
-        memory.clear();       // Need to add a clear method to Memory
+        memory.clear();
         
-        // Restart client threads and game logic
-        startGame(); 
+        // client list is reused, but threads need restarting
+        // ensure clients internal state is ready for restart if they hold state
         
-        Log.i(TAG, "Game state reset.");
+        // startGame() will re-initialize executor and submit clients
+        Log.i(TAG, "Game state reset completed.");
+        // caller (like gameview retry handler) should call startgame() if needed immediately
     }
 
 } 

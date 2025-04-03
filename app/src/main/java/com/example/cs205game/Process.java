@@ -3,7 +3,7 @@ package com.example.cs205game;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class Process {
-    private static final AtomicInteger idCounter = new AtomicInteger(0);
+    private static final AtomicInteger idCounter = new AtomicInteger(0); // Global ID counter using AtomicInteger for thread safety
     private static final double BUFFER_COOLDOWN = 1.5; // 1.5 seconds cooldown in buffer
 
     /** Static method to reset the global ID counter. Call this when starting a new game. */
@@ -12,12 +12,12 @@ public class Process {
     }
 
     public enum ProcessState {
-        IN_QUEUE,
-        ON_CORE,
+        IN_QUEUE, // In the queue waiting to be processed
+        ON_CORE, // On a CPU core
         IN_IO, // Only relevant for IOProcess
         IO_COMPLETED_WAITING_CORE, // Only relevant for IOProcess
-        IN_BUFFER,
-        CONSUMED
+        IN_BUFFER, // In the buffer waiting to be consumed
+        CONSUMED // Process has been consumed
     }
 
     protected final int id;
@@ -31,11 +31,6 @@ public class Process {
     private double bufferCooldown = BUFFER_COOLDOWN;
     private boolean readyForConsumption = false;
     private double bufferCooldownRemainingS;
-
-
-    // Potential fields for drawing - added later if needed
-    // public float x, y;
-    // public int visualRepresentationId;
 
     public Process(int memoryRequirement, double patience, double cpuTime) {
         this.id = idCounter.incrementAndGet();
@@ -82,11 +77,11 @@ public class Process {
     }
 
     public double getBufferCooldownProgress() {
-        return 1.0 - (bufferCooldown / BUFFER_COOLDOWN);
+        return 1.0 - (bufferCooldown / BUFFER_COOLDOWN); // Calculate progress as a percentage
     }
 
     public double getBufferCooldownRemaining() {
-        return bufferCooldownRemainingS;
+        return bufferCooldownRemainingS; // Return remaining cooldown time
     }
 
     // --- Setters / Modifiers ---

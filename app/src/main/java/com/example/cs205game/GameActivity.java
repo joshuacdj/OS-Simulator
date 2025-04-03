@@ -9,28 +9,30 @@ import android.view.WindowInsetsController;
 import android.view.WindowManager;
 import android.view.Window;
 
+// the main activity for the actual game screen holds the gameview
 public class GameActivity extends Activity {
 
     private static final String TAG = "GameActivity";
     private GameView gameView;
 
+    // runs when the activity is created
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         Log.d(TAG, "onCreate");
 
-        // Keep screen on during gameplay
+        // stop screen from turning off during game
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
-        // Set the content view *first*
+        // create n set the game view
         gameView = new GameView(this);
         setContentView(gameView);
 
-        // Make fullscreen *after* setting content view
+        // try to make it fullscreen removes title bar
         getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
                 WindowManager.LayoutParams.FLAG_FULLSCREEN);
 
-        // Hide system bars *after* setting content view
+        // try hide the system nav/status bars too
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             WindowInsetsController controller = getWindow().getInsetsController();
             if (controller != null) {
@@ -40,36 +42,37 @@ public class GameActivity extends Activity {
                  Log.w(TAG, "WindowInsetsController is null");
             }
         } else {
-            // Handle older versions if necessary
-            // Note: FLAG_FULLSCREEN might be sufficient for older APIs
+            // older android versions might need different flags
+            // flag_fullscreen might be enough tho
         }
     }
 
+    // called when the game is paused (e.g user switches app)
     @Override
     protected void onPause() {
         super.onPause();
         Log.d(TAG, "onPause");
         if (gameView != null) {
-            gameView.pause(); // Pauses the game loop
+            gameView.pause(); // tells the view to pause its game loop
         }
     }
 
+    // called when the game is resumed
     @Override
     protected void onResume() {
         super.onResume();
         Log.d(TAG, "onResume");
         if (gameView != null) {
-            gameView.resume(); // Resumes the game loop
+            gameView.resume(); // tells the view to resume its game loop
         }
     }
 
+    // called when the activity is being destroyed
     @Override
     protected void onDestroy() {
         super.onDestroy();
         Log.d(TAG, "onDestroy");
-        // Ensure game resources are cleaned up if activity is destroyed
-        if (gameView != null) {
-             // Consider if explicit cleanup needed beyond stopping thread in surfaceDestroyed
-        }
+        // gameview surface destroyed should handle thread stopping
+        // maybe add more cleanup here later if needed
     }
 } 
