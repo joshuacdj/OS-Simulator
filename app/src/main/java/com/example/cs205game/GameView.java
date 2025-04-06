@@ -5,6 +5,7 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.Path;
 import android.graphics.PointF;
 import android.graphics.Rect;
 import android.graphics.RectF;
@@ -15,6 +16,8 @@ import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 import android.util.AttributeSet;
 import android.app.Activity;
+import android.animation.ValueAnimator;
+import android.view.animation.LinearInterpolator;
 
 import java.util.HashMap;
 import java.util.List;
@@ -99,6 +102,24 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
     private float processInIoWidth = 100f;
     private float processInIoHeight = 60f;
 
+    // --- Animation Values ---
+    private float animationValue = 0f;
+    private long lastTime = System.currentTimeMillis();
+    private ValueAnimator animator;
+
+    // Add these paint declarations in the initialization section
+    private Paint processBgPaint;
+    private Paint ioBgPaint;
+    private Paint patienceBgPaint;
+    private Paint patienceArcPaint;
+    private Paint patienceCenterPaint;
+    private Paint textPaint2;
+
+    // --- Error Display State ---
+    private boolean isShowingError = false;
+    private String errorMessage = "";
+    private long errorDisplayStartTime;
+    private final Paint errorMessagePaint;
 
     public GameView(Context context) {
         this(context, null);
@@ -138,134 +159,192 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
         whiteLabelPaint.setTextSize(40f); // Same size as labelPaint
         whiteLabelPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD)); // Same style
 
+        // Initialize error message paint
+        errorMessagePaint = new Paint();
+        errorMessagePaint.setColor(Color.RED);
+        errorMessagePaint.setTextSize(48f);
+        errorMessagePaint.setTextAlign(Paint.Align.CENTER);
+        errorMessagePaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+        
         Log.i(TAG, "GameView created");
 
         // Game Over Paints
         gameOverOverlayPaint = new Paint();
-        gameOverOverlayPaint.setColor(Color.argb(180, 0, 0, 0)); // Semi-transparent black
+        gameOverOverlayPaint.setColor(Color.argb(220, 0, 0, 0)); // Darker semi-transparent black
 
         gameOverPanelPaint = new Paint();
-        gameOverPanelPaint.setColor(Color.DKGRAY);
+        gameOverPanelPaint.setColor(Color.parseColor("#212121")); // Very dark gray
         gameOverPanelPaint.setStyle(Paint.Style.FILL);
 
         gameOverTextPaint = new Paint();
-        gameOverTextPaint.setColor(Color.RED);
+        gameOverTextPaint.setColor(Color.parseColor("#F44336")); // Material red
         gameOverTextPaint.setTextSize(100f);
-        gameOverTextPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+        gameOverTextPaint.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
         gameOverTextPaint.setTextAlign(Paint.Align.CENTER);
 
         buttonPaint = new Paint();
-        buttonPaint.setColor(Color.GRAY);
+        buttonPaint.setColor(Color.parseColor("#37474F")); // Dark blue-gray
         buttonPaint.setStyle(Paint.Style.FILL);
 
         buttonTextPaint = new Paint();
-        buttonTextPaint.setColor(Color.WHITE);
+        buttonTextPaint.setColor(Color.parseColor("#4CAF50")); // Green
         buttonTextPaint.setTextSize(50f);
-        buttonTextPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+        buttonTextPaint.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
         buttonTextPaint.setTextAlign(Paint.Align.CENTER);
+        
+        // Start animation loop for visual effects
+        startAnimationLoop();
+
+        // Initialize process representation paints
+        processBgPaint = new Paint();
+        processBgPaint.setColor(Color.parseColor("#3F51B5")); // Indigo for regular processes
+        processBgPaint.setStyle(Paint.Style.FILL);
+        processBgPaint.setAntiAlias(true);
+        
+        ioBgPaint = new Paint();
+        ioBgPaint.setColor(Color.parseColor("#673AB7")); // Deep Purple for IO processes (changed from teal)
+        ioBgPaint.setStyle(Paint.Style.FILL);
+        ioBgPaint.setAntiAlias(true);
+        
+        patienceBgPaint = new Paint();
+        patienceBgPaint.setColor(Color.parseColor("#424242")); // Dark gray
+        patienceBgPaint.setStyle(Paint.Style.FILL);
+        patienceBgPaint.setAntiAlias(true);
+        
+        patienceArcPaint = new Paint();
+        patienceArcPaint.setColor(Color.parseColor("#4CAF50")); // Green
+        patienceArcPaint.setStyle(Paint.Style.STROKE);
+        patienceArcPaint.setStrokeWidth(4);
+        patienceArcPaint.setAntiAlias(true);
+        
+        patienceCenterPaint = new Paint();
+        patienceCenterPaint.setColor(Color.WHITE);
+        patienceCenterPaint.setStyle(Paint.Style.FILL);
+        patienceCenterPaint.setAntiAlias(true);
+        
+        textPaint2 = new Paint(textPaint);
+        textPaint2.setTextSize(18);
+    }
+
+    /**
+     * Initializes and starts the animation loop for visual effects.
+     * Animation is much more subtle and only used for very specific elements now.
+     */
+    private void startAnimationLoop() {
+        // Set a fixed animation value instead of animating
+        animationValue = 0.75f; // Fixed value that doesn't change
+        
+        // Still define animator for compatibility but don't make it animate
+        animator = ValueAnimator.ofFloat(animationValue, animationValue);
+        animator.setDuration(1000);
+        animator.setRepeatCount(0);
+        
+        // This setup keeps the animation value at a constant 0.75f 
+        // so elements don't blink or pulse
     }
 
     private void initializePaints() {
         backgroundPaint = new Paint();
-        backgroundPaint.setColor(Color.DKGRAY);
+        backgroundPaint.setColor(Color.parseColor("#121212")); // Dark theme background
 
         processQueueAreaPaint = new Paint();
-        processQueueAreaPaint.setColor(Color.parseColor("#444444"));
+        processQueueAreaPaint.setColor(Color.parseColor("#1E1E1E")); // Dark gray
         processQueueAreaPaint.setStyle(Paint.Style.FILL);
 
         processPaint = new Paint();
-        processPaint.setColor(Color.CYAN);
+        processPaint.setColor(Color.parseColor("#3949AB")); // Indigo for standard processes
         processPaint.setStyle(Paint.Style.FILL);
 
         ioProcessPaint = new Paint(); // Different color for IO processes
-        ioProcessPaint.setColor(Color.MAGENTA);
+        ioProcessPaint.setColor(Color.parseColor("#673AB7")); // Deep purple for IO processes (changed from teal)
         ioProcessPaint.setStyle(Paint.Style.FILL);
 
         patienceGreenPaint = new Paint();
-        patienceGreenPaint.setColor(Color.GREEN);
+        patienceGreenPaint.setColor(Color.parseColor("#4CAF50")); // Green
         patienceGreenPaint.setStyle(Paint.Style.STROKE);
         patienceGreenPaint.setStrokeWidth(8);
 
         patienceYellowPaint = new Paint();
-        patienceYellowPaint.setColor(Color.YELLOW);
+        patienceYellowPaint.setColor(Color.parseColor("#FFC107")); // Yellow
         patienceYellowPaint.setStyle(Paint.Style.STROKE);
         patienceYellowPaint.setStrokeWidth(8);
 
         patienceRedPaint = new Paint();
-        patienceRedPaint.setColor(Color.RED);
+        patienceRedPaint.setColor(Color.parseColor("#F44336")); // Red
         patienceRedPaint.setStyle(Paint.Style.STROKE);
         patienceRedPaint.setStrokeWidth(8);
 
         corePaint = new Paint();
-        corePaint.setColor(Color.parseColor("#6699CC"));
-        corePaint.setStyle(Paint.Style.STROKE);
+        corePaint.setColor(Color.parseColor("#303F9F")); // Dark blue for CPU cores
+        corePaint.setStyle(Paint.Style.FILL_AND_STROKE);
         corePaint.setStrokeWidth(4);
 
         ioAreaPaint = new Paint();
-        ioAreaPaint.setColor(Color.parseColor("#FFB74D"));
-        ioAreaPaint.setStyle(Paint.Style.STROKE);
+        ioAreaPaint.setColor(Color.parseColor("#512DA8")); // Dark purple for IO area (changed from teal)
+        ioAreaPaint.setStyle(Paint.Style.FILL_AND_STROKE);
         ioAreaPaint.setStrokeWidth(4);
 
         bufferPaint = new Paint();
-        bufferPaint.setColor(Color.parseColor("#81C784"));
-        bufferPaint.setStyle(Paint.Style.STROKE);
+        bufferPaint.setColor(Color.parseColor("#5E35B1")); // Deep purple for buffer
+        bufferPaint.setStyle(Paint.Style.FILL_AND_STROKE);
         bufferPaint.setStrokeWidth(4);
 
         clientAreaPaint = new Paint();
-        clientAreaPaint.setColor(Color.parseColor("#BA68C8"));
-        clientAreaPaint.setStyle(Paint.Style.STROKE);
+        clientAreaPaint.setColor(Color.parseColor("#C62828")); // Dark red for client area
+        clientAreaPaint.setStyle(Paint.Style.FILL_AND_STROKE);
         clientAreaPaint.setStrokeWidth(4);
 
         textPaint = new Paint();
         textPaint.setColor(Color.WHITE);
         textPaint.setTextSize(30f);
         textPaint.setAntiAlias(true);
+        textPaint.setTypeface(Typeface.MONOSPACE); // Computer font style
 
         smallTextPaint = new Paint();
-        smallTextPaint.setColor(Color.BLACK);
+        smallTextPaint.setColor(Color.WHITE);
         smallTextPaint.setTextSize(20f);
         smallTextPaint.setAntiAlias(true);
         smallTextPaint.setTextAlign(Paint.Align.CENTER);
-        smallTextPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+        smallTextPaint.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
 
         memoryCellPaint = new Paint();
-        memoryCellPaint.setColor(Color.GRAY);
+        memoryCellPaint.setColor(Color.parseColor("#424242")); // Dark gray
         memoryCellPaint.setStyle(Paint.Style.STROKE);
         memoryCellPaint.setStrokeWidth(2);
 
         memoryUsedPaint = new Paint();
-        memoryUsedPaint.setColor(Color.BLUE);
+        memoryUsedPaint.setColor(Color.parseColor("#F44336")); // Red for memory usage (changed from blue)
         memoryUsedPaint.setStyle(Paint.Style.FILL);
 
         healthBarPaint = new Paint();
-        healthBarPaint.setColor(Color.GREEN);
+        healthBarPaint.setColor(Color.parseColor("#4CAF50")); // Green for health
         healthBarPaint.setStyle(Paint.Style.FILL);
 
         healthBarBackgroundPaint = new Paint();
-        healthBarBackgroundPaint.setColor(Color.RED);
+        healthBarBackgroundPaint.setColor(Color.parseColor("#424242")); // Dark gray
         healthBarBackgroundPaint.setStyle(Paint.Style.FILL);
 
         dropZoneHighlightPaint = new Paint();
-        dropZoneHighlightPaint.setColor(Color.argb(100, 0, 255, 0)); // Semi-transparent green
+        dropZoneHighlightPaint.setColor(Color.argb(100, 76, 175, 80)); // Semi-transparent green
         dropZoneHighlightPaint.setStyle(Paint.Style.FILL);
 
         errorFeedbackPaint = new Paint();
-        errorFeedbackPaint.setColor(Color.argb(150, 255, 0, 0)); // Semi-transparent red
+        errorFeedbackPaint.setColor(Color.argb(150, 244, 67, 54)); // Semi-transparent red
         errorFeedbackPaint.setStyle(Paint.Style.FILL);
 
         memoryTextPaint = new Paint();
-        memoryTextPaint.setColor(Color.BLACK);
+        memoryTextPaint.setColor(Color.WHITE);
         memoryTextPaint.setTextSize(24f);
         memoryTextPaint.setAntiAlias(true);
         memoryTextPaint.setTextAlign(Paint.Align.CENTER);
-        memoryTextPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+        memoryTextPaint.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
 
         clientIdlePaint = new Paint();
-        clientIdlePaint.setColor(Color.GRAY);
+        clientIdlePaint.setColor(Color.parseColor("#424242")); // Dark gray
         clientIdlePaint.setStyle(Paint.Style.FILL);
 
         clientBusyPaint = new Paint();
-        clientBusyPaint.setColor(Color.parseColor("#81C784")); // Same as buffer for consistency?
+        clientBusyPaint.setColor(Color.parseColor("#4CAF50")); // Green when busy
         clientBusyPaint.setStyle(Paint.Style.FILL);
     }
 
@@ -513,7 +592,14 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
                 Log.d(TAG, "Dropped Process " + droppedProcess.getId() + " onto Core " + coreId);
                 if (sourceState == Process.ProcessState.IN_QUEUE) {
                     if (gameManager.getProcessManager().isProcessAtHead(droppedProcess.getId())) {
-                        gameManager.moveProcessFromQueueToCore(droppedProcess.getId(), coreId);
+                        // Check if there's enough memory to allocate the process
+                        if (!gameManager.getMemory().hasEnoughMemory(droppedProcess.getMemoryRequirement())) {
+                            // Not enough memory - provide vibration feedback
+                            vibrateForError();
+                            showInsufficientResourcesError();
+                        } else {
+                            gameManager.moveProcessFromQueueToCore(droppedProcess.getId(), coreId);
+                        }
                     } else {
                         Log.e(TAG, "FCFS Error on drop - Process " + droppedProcess.getId() + " no longer at head.");
                     }
@@ -604,7 +690,12 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
         // --- Draw Dragging Process Last (On Top) ---
         if (draggingProcess != null && dragCurrentPos != null) {
              // Use the stored bounds which are updated during move
-            drawProcessRepresentation(canvas, draggingProcess, draggingProcessBounds);
+            drawProcessRepresentation(canvas, draggingProcess, draggingProcessBounds, animationValue, draggingProcess.getCurrentState() == Process.ProcessState.IN_QUEUE);
+        }
+        
+        // --- Draw error message if needed ---
+        if (isShowingError) {
+            drawErrorMessage(canvas);
         }
 
         // --- Draw Game Over Overlay (if applicable) ---
@@ -784,7 +875,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
                 ));
                 
                 // Draw the process
-                drawProcessRepresentation(canvas, p, processRect);
+                drawProcessRepresentation(canvas, p, processRect, animationValue, p.getCurrentState() == Process.ProcessState.IN_QUEUE);
                 
                 currentY += processHeight + processMargin;
                 index++;
@@ -829,46 +920,218 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
     }
 
     /** Overload to draw process in a specific RectF */
-    private void drawProcessRepresentation(Canvas canvas, Process p, RectF bounds) {
-         // Select paint based on process type
-         Paint bodyPaint = (p instanceof IOProcess) ? ioProcessPaint : processPaint;
+    private void drawProcessRepresentation(Canvas canvas, Process p, RectF bounds, float alpha, boolean inQueue) {
+        boolean isIOProcess = p instanceof IOProcess;
+        
+        // Draw chip background
+        Paint chipPaint = isIOProcess ? ioBgPaint : processBgPaint;
+        chipPaint.setAlpha((int)(255 * alpha));
+        canvas.drawRoundRect(bounds, 16, 16, chipPaint);
+        
+        // For IO processes, just use a distinctive color without any circuit pattern
+        
+        // Draw process details
+        String processText = "P" + p.getId() + " [" + p.getMemoryRequirement() + "M]";
+        Paint textPaint = new Paint(this.textPaint);
+        textPaint.setAlpha((int)(255 * alpha));
+        textPaint.setTextAlign(Paint.Align.LEFT);
+        float textX = bounds.left + 12;
+        float textY = bounds.centerY() + 6;
+        canvas.drawText(processText, textX, textY, textPaint);
+        
+        // Add specific I/O marker
+        if (isIOProcess) {
+            Paint ioPaint = new Paint(textPaint2);
+            ioPaint.setAlpha((int)(255 * alpha));
+            ioPaint.setTextAlign(Paint.Align.RIGHT);
+            ioPaint.setColor(Color.parseColor("#FFC107"));  // Amber color for I/O text
+            ioPaint.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
+            float ioLabelX = bounds.right - 12;
+            canvas.drawText("I/O", ioLabelX, textY, ioPaint);
+            
+            // Add IO WAIT text if the process is paused for IO
+            IOProcess ioP = (IOProcess) p;
+            if (ioP.getCurrentState() == Process.ProcessState.ON_CORE && ioP.isCpuPausedForIO()) {
+                // Draw "IO WAIT" text inside the process
+                Paint ioPausedPaint = new Paint(patienceRedPaint);
+                ioPausedPaint.setStyle(Paint.Style.FILL);
+                ioPausedPaint.setTextSize(22); // Smaller text
+                ioPausedPaint.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
+                ioPausedPaint.setTextAlign(Paint.Align.CENTER);
+                canvas.drawText("IO WAIT", bounds.centerX(), bounds.centerY() + 8, ioPausedPaint);
+            }
+        }
 
-         // Calculate center and radius for a circle within the bounds
-         float centerX = bounds.centerX();
-         float centerY = bounds.centerY();
-         float radius = Math.min(bounds.width(), bounds.height()) / 2f;
-
-         // Draw Circle
-         canvas.drawCircle(centerX, centerY, radius, bodyPaint);
-
-         // Draw ID Text centered (adjust Y offset based on radius/text size)
-         String idText = "P" + p.getId();
-         float idPct = 0.3f; // Position ID 30% down from center
-         canvas.drawText(idText, centerX, centerY - radius * idPct + smallTextPaint.getTextSize() / 3, smallTextPaint);
-
-         // Draw Memory Requirement Text below ID
-         String memText = p.getMemoryRequirement() + "GB";
-         float memPct = 0.3f; // Position Mem 30% up from center
-         canvas.drawText(memText, centerX, centerY + radius * memPct + memoryTextPaint.getTextSize() / 3, memoryTextPaint);
-
-         // Draw patience arc IF in queue
-         if (p.getCurrentState() == Process.ProcessState.IN_QUEUE) {
-              // Create a square RectF centered within the original bounds for the arc
-              tempRectF.set(centerX - radius, centerY - radius, centerX + radius, centerY + radius);
-              drawPatienceArc(canvas, p, tempRectF); // Pass the square bounds
-         }
+        // Draw patience indicator as a decreasing border if in queue
+        if (inQueue) {
+            // Calculate patience ratio
+            float patienceRatio = (float) p.getRemainingPatienceRatio();
+            
+            // Select paint color based on patience level
+            int borderColor;
+            if (patienceRatio > 0.7) {
+                borderColor = Color.parseColor("#4CAF50"); // Green
+            } else if (patienceRatio > 0.4) {
+                borderColor = Color.parseColor("#FFC107"); // Yellow
+            } else {
+                borderColor = Color.parseColor("#F44336"); // Red
+            }
+            
+            // Create border paint
+            Paint borderPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            borderPaint.setStyle(Paint.Style.STROKE);
+            borderPaint.setColor(borderColor);
+            borderPaint.setStrokeWidth(4); // Increased from 3 to 4 for better visibility
+            borderPaint.setAlpha((int)(255 * alpha));
+            
+            // Draw a rectangular border that decreases based on patience
+            float cornerRadius = 16; // Same as the roundRect cornerRadius
+            
+            if (patienceRatio >= 1.0f) {
+                // Draw full border for full patience
+                canvas.drawRoundRect(bounds, cornerRadius, cornerRadius, borderPaint);
+            } else {
+                // Calculate the total perimeter
+                float width = bounds.width();
+                float height = bounds.height();
+                float perimeter = 2 * (width + height);
+                
+                // Calculate how much of the perimeter to draw based on patience
+                float remainingPerimeter = perimeter * patienceRatio;
+                
+                // Create a path to draw the partial perimeter
+                Path borderPath = new Path();
+                
+                // Start from top-left corner
+                borderPath.moveTo(bounds.left + cornerRadius, bounds.top);
+                
+                // Calculate side lengths (adjusted for corners)
+                float topSide = width - 2 * cornerRadius;
+                float rightSide = height - 2 * cornerRadius;
+                float bottomSide = width - 2 * cornerRadius;
+                float leftSide = height - 2 * cornerRadius;
+                
+                // Draw top side if needed
+                if (remainingPerimeter > 0) {
+                    float drawLength = Math.min(remainingPerimeter, topSide);
+                    borderPath.rLineTo(drawLength, 0);
+                    remainingPerimeter -= drawLength;
+                    
+                    // If we've exhausted the patience, draw up to this point and stop
+                    if (remainingPerimeter <= 0) {
+                        canvas.drawPath(borderPath, borderPaint);
+                        return;
+                    }
+                    
+                    // Otherwise, complete the top side
+                    if (drawLength < topSide) {
+                        borderPath.rLineTo(topSide - drawLength, 0);
+                    }
+                }
+                
+                // Draw top-right corner arc
+                RectF cornerArc = new RectF(
+                    bounds.right - 2 * cornerRadius, 
+                    bounds.top, 
+                    bounds.right, 
+                    bounds.top + 2 * cornerRadius
+                );
+                borderPath.arcTo(cornerArc, 270, 90);
+                
+                // Draw right side if needed
+                if (remainingPerimeter > 0) {
+                    float drawLength = Math.min(remainingPerimeter, rightSide);
+                    borderPath.rLineTo(0, drawLength);
+                    remainingPerimeter -= drawLength;
+                    
+                    if (remainingPerimeter <= 0) {
+                        canvas.drawPath(borderPath, borderPaint);
+                        return;
+                    }
+                    
+                    if (drawLength < rightSide) {
+                        borderPath.rLineTo(0, rightSide - drawLength);
+                    }
+                }
+                
+                // Draw bottom-right corner arc
+                cornerArc = new RectF(
+                    bounds.right - 2 * cornerRadius, 
+                    bounds.bottom - 2 * cornerRadius, 
+                    bounds.right, 
+                    bounds.bottom
+                );
+                borderPath.arcTo(cornerArc, 0, 90);
+                
+                // Draw bottom side if needed
+                if (remainingPerimeter > 0) {
+                    float drawLength = Math.min(remainingPerimeter, bottomSide);
+                    borderPath.rLineTo(-drawLength, 0);
+                    remainingPerimeter -= drawLength;
+                    
+                    if (remainingPerimeter <= 0) {
+                        canvas.drawPath(borderPath, borderPaint);
+                        return;
+                    }
+                    
+                    if (drawLength < bottomSide) {
+                        borderPath.rLineTo(-(bottomSide - drawLength), 0);
+                    }
+                }
+                
+                // Draw bottom-left corner arc
+                cornerArc = new RectF(
+                    bounds.left, 
+                    bounds.bottom - 2 * cornerRadius, 
+                    bounds.left + 2 * cornerRadius, 
+                    bounds.bottom
+                );
+                borderPath.arcTo(cornerArc, 90, 90);
+                
+                // Draw left side if needed
+                if (remainingPerimeter > 0) {
+                    float drawLength = Math.min(remainingPerimeter, leftSide);
+                    borderPath.rLineTo(0, -drawLength);
+                    remainingPerimeter -= drawLength;
+                    
+                    if (remainingPerimeter <= 0) {
+                        canvas.drawPath(borderPath, borderPaint);
+                        return;
+                    }
+                    
+                    if (drawLength < leftSide) {
+                        borderPath.rLineTo(0, -(leftSide - drawLength));
+                    }
+                }
+                
+                // Draw top-left corner arc
+                cornerArc = new RectF(
+                    bounds.left, 
+                    bounds.top, 
+                    bounds.left + 2 * cornerRadius, 
+                    bounds.top + 2 * cornerRadius
+                );
+                borderPath.arcTo(cornerArc, 180, 90);
+                
+                // Draw the path
+                canvas.drawPath(borderPath, borderPaint);
+            }
+        }
     }
 
      /** Overload to draw process at a specific position with specific size (used for dragging) */
     private void drawProcessRepresentation(Canvas canvas, Process p, float x, float y, float width, float height) {
         tempRectF.set(x, y, x + width, y + height);
-        drawProcessRepresentation(canvas, p, tempRectF);
+        drawProcessRepresentation(canvas, p, tempRectF, animationValue, p.getCurrentState() == Process.ProcessState.IN_QUEUE);
     }
 
-    private void drawPatienceArc(Canvas canvas, Process p, RectF circleBounds) { // Bounds are now the circle bounds
-        float sweepAngle = 360f * (float)(p.getPatienceCounter() / p.getInitialPatience());
+    private void drawPatienceArc(Canvas canvas, Process p, RectF circleBounds) {
+        // Calculate the patience ratio
+        float patienceRatio = (float) p.getRemainingPatienceRatio();
+        float sweepAngle = 360f * patienceRatio;
+        
+        // Select paint based on patience level
         Paint patiencePaint;
-        double patienceRatio = p.getPatienceCounter() / p.getInitialPatience();
 
         if (patienceRatio > 0.7) {
             patiencePaint = patienceGreenPaint;
@@ -877,11 +1140,37 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
         } else {
             patiencePaint = patienceRedPaint;
         }
-        float padding = 10f; // Padding outside the circle
-        // Use the circleBounds directly for the arc RectF calculation
-        tempRectF.set(circleBounds.left - padding, circleBounds.top - padding,
-                     circleBounds.right + padding, circleBounds.bottom + padding);
-        canvas.drawArc(tempRectF, -90, sweepAngle, false, patiencePaint);
+        
+        // Draw background circle
+        Paint bgPaint = new Paint();
+        bgPaint.setColor(Color.parseColor("#424242")); // Dark gray
+        bgPaint.setStyle(Paint.Style.FILL);
+        canvas.drawCircle(circleBounds.centerX(), circleBounds.centerY(), 
+                        circleBounds.width()/2, bgPaint);
+        
+        // Create a RectF for the arc
+        RectF arcRect = new RectF(circleBounds);
+        
+        // Draw the arc representing remaining patience
+        patiencePaint.setStyle(Paint.Style.FILL);
+        canvas.drawArc(arcRect, -90, sweepAngle, true, patiencePaint);
+        
+        // Draw a small circular border
+        Paint borderPaint = new Paint(patiencePaint);
+        borderPaint.setStyle(Paint.Style.STROKE);
+        borderPaint.setStrokeWidth(2);
+        canvas.drawCircle(circleBounds.centerX(), circleBounds.centerY(), 
+                        circleBounds.width()/2, borderPaint);
+        
+        // Add a non-blinking outline for critical patience
+        if (patienceRatio < 0.3) {
+            Paint warningPaint = new Paint(patienceRedPaint);
+            warningPaint.setStyle(Paint.Style.STROKE);
+            warningPaint.setStrokeWidth(3);
+            float warningRadius = circleBounds.width()/2 * 1.2f;
+            canvas.drawCircle(circleBounds.centerX(), circleBounds.centerY(), 
+                            warningRadius, warningPaint);
+        }
     }
 
     private void drawScoreHealth(Canvas canvas, Rect area) {
@@ -948,37 +1237,121 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
             Rect coreRect = entry.getValue();
             Core core = gameManager.getCpuCores().get(coreId);
 
-            canvas.drawRect(coreRect, corePaint);
-            canvas.drawText("Core " + core.getId(), coreRect.left + 10, coreRect.top + 30, textPaint);
+            // Draw CPU core background
+            RectF coreRectF = new RectF(coreRect);
+            canvas.drawRoundRect(coreRectF, 16, 16, corePaint);
+            
+            // Draw inner CPU area with circuit-like patterns
+            float margin = 15;
+            RectF innerRect = new RectF(
+                coreRectF.left + margin,
+                coreRectF.top + margin,
+                coreRectF.right - margin,
+                coreRectF.bottom - margin
+            );
+            
+            Paint cpuPaint = new Paint();
+            cpuPaint.setColor(Color.DKGRAY);
+            canvas.drawRoundRect(innerRect, 8, 8, cpuPaint);
+            
+            // Draw circuit traces
+            Paint tracePaint = new Paint();
+            tracePaint.setColor(Color.parseColor("#4CAF50")); // Green traces
+            tracePaint.setStrokeWidth(2);
+            
+            // Horizontal traces
+            for (int i = 1; i < 4; i++) {
+                float y = innerRect.top + innerRect.height() * (i / 4f);
+                canvas.drawLine(innerRect.left + 10, y, innerRect.right - 10, y, tracePaint);
+            }
+            
+            // Vertical traces
+            for (int i = 1; i < 4; i++) {
+                float x = innerRect.left + innerRect.width() * (i / 4f);
+                canvas.drawLine(x, innerRect.top + 10, x, innerRect.bottom - 10, tracePaint);
+            }
+            
+            // Draw core label
+            canvas.drawText("Core " + core.getId(), coreRect.left + 20, coreRect.top + 30, textPaint);
 
+            // Draw the process if present
             Process p = core.getCurrentProcess();
             if (core.isUtilized() && p != null) {
                 if (p == draggingProcess) continue;
 
-                // Draw process representation centered within the core rect
-                 RectF pBounds = getProcessVisualBoundsOnCore(core.getId(), p);
-                 if (pBounds != null) {
-                     drawProcessRepresentation(canvas, p, pBounds);
+                // Draw process representation
+                RectF pBounds = getProcessVisualBoundsOnCore(core.getId(), p);
+                if (pBounds != null) {
+                    drawProcessRepresentation(canvas, p, pBounds, animationValue, p.getCurrentState() == Process.ProcessState.IN_QUEUE);
 
-                     // Draw CPU Timer progress below the process
-                     float cpuProgressRatio = 1.0f - (float)(p.getRemainingCpuTime() / p.getCpuTimer());
-                     int progressWidth = (int)(coreRect.width() * 0.8f);
-                     int progressLeft = coreRect.left + (coreRect.width() - progressWidth) / 2;
-                     int progressTop = (int)(pBounds.bottom + 5); // Position below process
-                     int progressHeight = 20;
-                     tempRect.set(progressLeft, progressTop, progressLeft + progressWidth, progressTop + progressHeight);
-                     canvas.drawRect(tempRect, memoryCellPaint); // Background
-                     tempRect.right = progressLeft + (int)(progressWidth * cpuProgressRatio);
-                     canvas.drawRect(tempRect, memoryUsedPaint); // Foreground
-                 }
-
-                 // Indicate if waiting for IO
-                 if (p instanceof IOProcess) {
-                    IOProcess ioP = (IOProcess) p;
-                    if (ioP.isCpuPausedForIO()) {
-                        canvas.drawText("IO!", coreRect.centerX(), coreRect.bottom - 10, patienceRedPaint);
+                    // Draw CPU Timer progress below the process
+                    float cpuProgressRatio = 1.0f - (float)(p.getRemainingCpuTime() / p.getCpuTimer());
+                    int progressWidth = (int)(coreRect.width() * 0.8f);
+                    int progressLeft = coreRect.left + (coreRect.width() - progressWidth) / 2;
+                    int progressTop = (int)(pBounds.bottom + 5); // Position below process
+                    int progressHeight = 20;
+                    
+                    // Draw progress background
+                    tempRect.set(progressLeft, progressTop, progressLeft + progressWidth, progressTop + progressHeight);
+                    Paint progressBgPaint = new Paint(memoryCellPaint);
+                    progressBgPaint.setStyle(Paint.Style.FILL);
+                    progressBgPaint.setColor(Color.parseColor("#424242")); // Dark gray
+                    canvas.drawRect(tempRect, progressBgPaint);
+                    
+                    // Draw progress foreground
+                    tempRect.right = progressLeft + (int)(progressWidth * cpuProgressRatio);
+                    Paint progressFgPaint = new Paint(memoryUsedPaint);
+                    // Color gets greener as it completes
+                    float hue = cpuProgressRatio * 120; // 0 is red, 120 is green
+                    progressFgPaint.setColor(Color.HSVToColor(new float[]{hue, 0.7f, 0.8f}));
+                    canvas.drawRect(tempRect, progressFgPaint);
+                    
+                    // Add processing activity indicator if active (steady, not pulsing)
+                    if (core.isUtilized()) {
+                        // Draw activity light
+                        Paint activityPaint = new Paint();
+                        activityPaint.setColor(Color.parseColor("#F44336")); // Red activity light
+                        
+                        float lightRadius = 8;
+                        canvas.drawCircle(innerRect.right - 20, innerRect.top + 20, lightRadius, activityPaint);
                     }
-                 }
+
+                    // Draw the downward arrow for IO processes waiting for IO
+                    if (p instanceof IOProcess) {
+                        IOProcess ioP = (IOProcess) p;
+                        if (ioP.isCpuPausedForIO()) {
+                            // Draw arrow pointing downward
+                            Paint arrowPaint = new Paint();
+                            arrowPaint.setColor(Color.parseColor("#FF5252")); // Bright red
+                            arrowPaint.setStyle(Paint.Style.FILL);
+                            arrowPaint.setStrokeWidth(4);
+                            
+                            // Draw vertical arrow pointing down
+                            float arrowStartX = pBounds.centerX();
+                            float arrowStartY = pBounds.bottom + progressHeight + 10;
+                            float arrowEndX = arrowStartX;
+                            float arrowEndY = arrowStartY + 30;
+                            
+                            canvas.drawLine(arrowStartX, arrowStartY, arrowEndX, arrowEndY, arrowPaint);
+                            
+                            // Draw arrow head
+                            Path arrowHead = new Path();
+                            arrowHead.moveTo(arrowEndX, arrowEndY);
+                            arrowHead.lineTo(arrowEndX - 10, arrowEndY - 15);
+                            arrowHead.lineTo(arrowEndX + 10, arrowEndY - 15);
+                            arrowHead.close();
+                            canvas.drawPath(arrowHead, arrowPaint);
+                            
+                            // Add text label below the arrow
+                            Paint labelPaint = new Paint();
+                            labelPaint.setColor(Color.parseColor("#FF5252"));
+                            labelPaint.setTextSize(16);
+                            labelPaint.setTextAlign(Paint.Align.CENTER);
+                            labelPaint.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
+                            canvas.drawText("Move to I/O", arrowEndX, arrowEndY + 20, labelPaint);
+                        }
+                    }
+                }
             }
         }
     }
@@ -995,7 +1368,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
              // Draw process representation centered in IO area
              RectF pBounds = getProcessVisualBoundsInIO(p);
              if (pBounds != null) {
-                drawProcessRepresentation(canvas, p, pBounds);
+                drawProcessRepresentation(canvas, p, pBounds, animationValue, p.getCurrentState() == Process.ProcessState.IN_QUEUE);
 
                 // Draw IO Timer progress
                  float ioProgressRatio = 1.0f - (float)(p.getRemainingIoTime() / p.getIoTimer());
@@ -1010,167 +1383,338 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
 
                  if (p.isIoCompleted()) {
                      canvas.drawText("DONE", area.centerX(), area.bottom - 10, patienceGreenPaint);
+                     
+                     // Add attention indicator for completed IO, but without blinking
+                     // Draw upward arrow indicating it should move back to CPU
+                     Paint arrowPaint = new Paint();
+                     arrowPaint.setColor(Color.parseColor("#4CAF50")); // Green
+                     arrowPaint.setStyle(Paint.Style.FILL);
+                     arrowPaint.setStrokeWidth(4);
+                     
+                     // Draw arrow body
+                     float arrowStartX = area.centerX();
+                     float arrowStartY = area.top - 40;
+                     float arrowEndX = area.centerX();
+                     float arrowEndY = area.top - 10;
+                     
+                     canvas.drawLine(arrowStartX, arrowStartY, arrowEndX, arrowEndY, arrowPaint);
+                     
+                     // Draw arrow head
+                     Path arrowHead = new Path();
+                     arrowHead.moveTo(arrowEndX, arrowEndY);
+                     arrowHead.lineTo(arrowEndX - 10, arrowEndY + 15);
+                     arrowHead.lineTo(arrowEndX + 10, arrowEndY + 15);
+                     arrowHead.close();
+                     canvas.drawPath(arrowHead, arrowPaint);
+                     
+                     // Add text label
+                     Paint labelPaint = new Paint();
+                     labelPaint.setColor(Color.parseColor("#4CAF50"));
+                     labelPaint.setTextSize(18);
+                     labelPaint.setTextAlign(Paint.Align.CENTER);
+                     labelPaint.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
+                     canvas.drawText("Return to CPU", arrowStartX, arrowStartY - 10, labelPaint);
+                     
+                     // Draw highlight around the process (steady, not pulsing)
+                     Paint glowPaint = new Paint();
+                     glowPaint.setStyle(Paint.Style.STROKE);
+                     glowPaint.setColor(Color.parseColor("#4CAF50"));
+                     glowPaint.setStrokeWidth(4);
+                     RectF glowBounds = new RectF(pBounds);
+                     glowBounds.inset(-6, -6);
+                     canvas.drawRoundRect(glowBounds, 16, 16, glowPaint);
                  }
              }
          }
     }
 
-     private void drawBuffer(Canvas canvas) {
-        RectF area = bufferArea;
-        Paint bufferBgPaint = new Paint();
-        bufferBgPaint.setColor(Color.LTGRAY);
-        canvas.drawRect(area, bufferBgPaint);
-
-        // Draw "Buffer" label slightly above the box, using white paint
-        float bufferLabelY = area.top - 10; // Position slightly above the top edge
-        canvas.drawText("Buffer", area.left + 10, bufferLabelY, whiteLabelPaint);
+    /**
+     * Draws the buffer area with improved visualization.
+     * Shows processes in a stack-like representation with data flow indicators.
+     */
+    private void drawBuffer(Canvas canvas) {
+        // Get the processes in the buffer using SharedBuffer's methods
+        Process[] bufferProcesses = gameManager.getSharedBuffer().getProcessesInBuffer();
+        int bufferSize = gameManager.getSharedBuffer().size();
+        int capacity = gameManager.getSharedBuffer().getCapacity();
         
-        // Draw "Capacity" label inside the box, using black, bold paint
-        String capacityText = "Capacity: " + sharedBuffer.size() + " / " + GameManager.BUFFER_CAPACITY;
-        canvas.drawText(capacityText, 
-                       area.left + 10, area.top + 40, labelPaint); // Use labelPaint (black, bold)
-
-        // Calculate dimensions for process circles in buffer
-        float circleSpacing = 20;
-        float circleRadius = 30;
-        float startX = area.left + circleRadius + 20;
-        float startY = area.top + 80;
-
-        // Draw processes in buffer
-        Process[] processes = sharedBuffer.getProcessesInBuffer();
-        for (int i = 0; i < processes.length; i++) {
-            if (processes[i] != null) {
-                float x = startX + (i * (circleRadius * 2 + circleSpacing));
+        // Draw the buffer container with tech-inspired design
+        Paint bufferBorderPaint = new Paint(bufferPaint);
+        bufferBorderPaint.setStyle(Paint.Style.STROKE);
+        bufferBorderPaint.setStrokeWidth(4);
+        bufferBorderPaint.setColor(Color.parseColor("#7B1FA2")); // Deep purple
+        
+        // Draw a circuit-inspired background
+        Paint circuitBgPaint = new Paint();
+        circuitBgPaint.setColor(Color.parseColor("#311B92")); // Darker purple
+        circuitBgPaint.setStyle(Paint.Style.FILL);
+        canvas.drawRect(bufferAreaRect, circuitBgPaint);
+        
+        // Draw subtle circuit patterns in the background
+        Paint circuitPaint = new Paint();
+        circuitPaint.setColor(Color.parseColor("#9575CD")); // Light purple
+        circuitPaint.setStrokeWidth(1);
+        circuitPaint.setStyle(Paint.Style.STROKE);
+        circuitPaint.setAlpha(60); // Very subtle
+        
+        // Draw horizontal and vertical circuit lines
+        for (int i = 1; i < 8; i++) {
+            float xPos = bufferAreaRect.left + (bufferAreaRect.width() * i / 8f);
+            float yPos = bufferAreaRect.top + (bufferAreaRect.height() * i / 8f);
+            
+            // Horizontal line
+            canvas.drawLine(bufferAreaRect.left, yPos, bufferAreaRect.right, yPos, circuitPaint);
+            
+            // Vertical line
+            canvas.drawLine(xPos, bufferAreaRect.top, xPos, bufferAreaRect.bottom, circuitPaint);
+            
+            // Add small "nodes" at intersections
+            if (i % 2 == 0) {
+                for (int j = 1; j < 8; j += 2) {
+                    float nodeX = bufferAreaRect.left + (bufferAreaRect.width() * i / 8f);
+                    float nodeY = bufferAreaRect.top + (bufferAreaRect.height() * j / 8f);
+                    canvas.drawCircle(nodeX, nodeY, 2, circuitPaint);
+                }
+            }
+        }
+        
+        // Draw capacity indicator along the left side
+        float capacityHeight = bufferAreaRect.height() - 40; // Leave some margin
+        float capacityWidth = 20; // Width of capacity indicator
+        float capacityX = bufferAreaRect.left + 20; // Position from left edge
+        float capacityY = bufferAreaRect.top + 20; // Position from top
+        
+        // Draw capacity background
+        Paint capacityBgPaint = new Paint();
+        capacityBgPaint.setColor(Color.parseColor("#424242")); // Dark gray
+        capacityBgPaint.setStyle(Paint.Style.FILL);
+        RectF capacityRect = new RectF(
+            capacityX, 
+            capacityY, 
+            capacityX + capacityWidth, 
+            capacityY + capacityHeight
+        );
+        canvas.drawRect(capacityRect, capacityBgPaint);
+        
+        // Draw fill level
+        if (capacity > 0) {
+            float fillHeight = (float) bufferSize / capacity * capacityHeight;
+            Paint fillPaint = new Paint();
+            fillPaint.setColor(Color.parseColor("#7C4DFF")); // Bright purple
+            fillPaint.setStyle(Paint.Style.FILL);
+            
+            RectF fillRect = new RectF(
+                capacityX, 
+                capacityY + capacityHeight - fillHeight, 
+                capacityX + capacityWidth, 
+                capacityY + capacityHeight
+            );
+            canvas.drawRect(fillRect, fillPaint);
+            
+            // Add level markings
+            Paint markingPaint = new Paint();
+            markingPaint.setColor(Color.WHITE);
+            markingPaint.setStrokeWidth(1);
+            for (int i = 0; i <= capacity; i++) {
+                float y = capacityY + capacityHeight - (i * capacityHeight / capacity);
+                canvas.drawLine(capacityX - 5, y, capacityX, y, markingPaint);
+            }
+        }
+        
+        // Draw buffer title
+        Paint titlePaint = new Paint(textPaint);
+        titlePaint.setTextSize(28);
+        titlePaint.setFakeBoldText(true);
+        titlePaint.setTypeface(Typeface.MONOSPACE);
+        String title = "$ Buffer";
+        canvas.drawText(title, bufferAreaRect.left + 80, bufferAreaRect.top + 35, titlePaint);
+        
+        // Draw capacity text
+        String capacityText = "Capacity: " + bufferSize + " / " + capacity;
+        canvas.drawText(capacityText, bufferAreaRect.left + 250, bufferAreaRect.top + 35, titlePaint);
+        
+        // If buffer is empty, show a placeholder message
+        if (bufferProcesses.length == 0) {
+            String emptyText = "[ Buffer Empty ]";
+            titlePaint.setTextAlign(Paint.Align.CENTER);
+            titlePaint.setTextSize(24);
+            titlePaint.setColor(Color.parseColor("#BBBBBB")); // Light gray
+            canvas.drawText(emptyText, bufferAreaRect.centerX(), bufferAreaRect.centerY(), titlePaint);
+            return;
+        }
+        
+        // Calculate space for process chips
+        float processWidth = Math.min(120, (bufferAreaRect.width() - 150) / capacity);
+        float processHeight = 60;
+        float processSpacing = 10;
+        float startX = bufferAreaRect.left + 80;
+        float startY = bufferAreaRect.top + 60;
+        
+        // Draw processes in stack-like representation
+        for (int i = 0; i < bufferProcesses.length; i++) {
+            Process p = bufferProcesses[i];
+            
+            // Calculate position in a grid layout (3 or 4 per row depending on size)
+            int row = i / 3;
+            int col = i % 3;
+            
+            float x = startX + col * (processWidth + processSpacing);
+            float y = startY + row * (processHeight + processSpacing);
+            
+            // Create a rect for the process
+            RectF processRect = new RectF(x, y, x + processWidth, y + processHeight);
+            
+            // Draw memory chip-like representation
+            Paint chipPaint = new Paint();
+            chipPaint.setStyle(Paint.Style.FILL);
+            
+            // Determine color based on cooldown progress
+            float cooldownProgress = (float) p.getBufferCooldownProgress();
+            if (cooldownProgress >= 1.0f) {
+                // Ready for consumption - bright color
+                chipPaint.setColor(Color.parseColor("#7C4DFF")); // Bright purple
+            } else {
+                // Still cooling down - darker color
+                chipPaint.setColor(Color.parseColor("#5E35B1")); // Darker purple
+            }
+            
+            // Draw the main chip
+            canvas.drawRoundRect(processRect, 8, 8, chipPaint);
+            
+            // Draw connector pins on the bottom of the chip
+            Paint pinPaint = new Paint();
+            pinPaint.setColor(Color.parseColor("#E0E0E0")); // Light gray
+            pinPaint.setStyle(Paint.Style.FILL);
+            
+            float pinWidth = 8;
+            float pinHeight = 5;
+            float pinSpacing = (processWidth - (5 * pinWidth)) / 6;
+            float pinY = processRect.bottom;
+            
+            for (int pin = 0; pin < 5; pin++) {
+                float pinX = processRect.left + pinSpacing + pin * (pinWidth + pinSpacing);
+                RectF pinRect = new RectF(pinX, pinY, pinX + pinWidth, pinY + pinHeight);
+                canvas.drawRect(pinRect, pinPaint);
+            }
+            
+            // Draw a notch on top of the chip (like a real IC chip)
+            RectF notchRect = new RectF(
+                processRect.centerX() - 10,
+                processRect.top - 3,
+                processRect.centerX() + 10,
+                processRect.top + 3
+            );
+            canvas.drawRoundRect(notchRect, 3, 3, pinPaint);
+            
+            // Draw process ID
+            Paint idPaint = new Paint(textPaint);
+            idPaint.setTextSize(20);
+            idPaint.setColor(Color.WHITE);
+            idPaint.setTextAlign(Paint.Align.CENTER);
+            canvas.drawText("P" + p.getId(), processRect.centerX(), processRect.centerY() + 7, idPaint);
+            
+            // Draw cooldown progress bar if still cooling down
+            if (cooldownProgress < 1.0f) {
+                // Draw cooldown progress
+                RectF cooldownRect = new RectF(
+                    processRect.left,
+                    processRect.bottom - 10,
+                    processRect.left + processRect.width() * cooldownProgress,
+                    processRect.bottom - 5
+                );
+                Paint cooldownPaint = new Paint();
+                cooldownPaint.setColor(Color.parseColor("#7C4DFF")); // Bright purple
+                cooldownPaint.setStyle(Paint.Style.FILL);
+                canvas.drawRect(cooldownRect, cooldownPaint);
+            } else {
+                // Draw a "READY" label for processes ready for consumption
+                Paint readyPaint = new Paint();
+                readyPaint.setColor(Color.parseColor("#69F0AE")); // Bright green
+                readyPaint.setTextSize(14);
+                readyPaint.setTextAlign(Paint.Align.CENTER);
+                readyPaint.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
+                canvas.drawText("READY", processRect.centerX(), processRect.bottom - 15, readyPaint);
+            }
+        }
+        
+        // Draw connection to client area
+        drawBufferToClientConnection(canvas, bufferProcesses.length == 0);
+    }
+    
+    /**
+     * Draws connection lines between buffer and client area with data flow indicators
+     */
+    private void drawBufferToClientConnection(Canvas canvas, boolean isEmpty) {
+        // Draw the connection pipe between buffer and client
+        Paint pipePaint = new Paint();
+        pipePaint.setStyle(Paint.Style.STROKE);
+        pipePaint.setStrokeWidth(3);
+        
+        // If the buffer is empty, use a faded color
+        if (isEmpty) {
+            pipePaint.setColor(Color.parseColor("#424242")); // Dark gray for empty
+            pipePaint.setAlpha(80);
+        } else {
+            pipePaint.setColor(Color.parseColor("#7C4DFF")); // Purple for active
+        }
+        
+        // Calculate connection points
+        float bufferRight = bufferAreaRect.right;
+        float clientLeft = clientAreaRect.left;
+        float arrowY = (bufferAreaRect.bottom + bufferAreaRect.top) / 2;
+        
+        // Draw the main connection line
+        canvas.drawLine(bufferRight, arrowY, clientLeft, arrowY, pipePaint);
+        
+        // Only draw flow indicators if buffer is not empty
+        if (!isEmpty) {
+            // Draw arrowhead
+            Path arrowHead = new Path();
+            float arrowHeadSize = 10;
+            float arrowHeadX = clientLeft - 5;
+            
+            arrowHead.moveTo(arrowHeadX, arrowY);
+            arrowHead.lineTo(arrowHeadX - arrowHeadSize, arrowY - arrowHeadSize/2);
+            arrowHead.lineTo(arrowHeadX - arrowHeadSize, arrowY + arrowHeadSize/2);
+            arrowHead.close();
+            
+            Paint arrowPaint = new Paint(pipePaint);
+            arrowPaint.setStyle(Paint.Style.FILL);
+            canvas.drawPath(arrowHead, arrowPaint);
+            
+            // Draw data flow dots
+            Paint dataPaint = new Paint();
+            dataPaint.setColor(Color.parseColor("#B388FF")); // Light purple
+            dataPaint.setStyle(Paint.Style.FILL);
+            
+            float connectionLength = clientLeft - bufferRight;
+            int numDots = 5;
+            float dotSpacing = connectionLength / (numDots + 1);
+            
+            // Calculate a fixed offset based on time but not animating
+            // This makes it look more stable without the blinking
+            float dotOffset = (System.currentTimeMillis() % 1000) / 1000f * dotSpacing;
+            
+            for (int i = 0; i < numDots; i++) {
+                float dotX = bufferRight + dotSpacing * (i + 1) - dotOffset;
+                if (dotX < bufferRight) dotX += connectionLength;
+                if (dotX > clientLeft) dotX -= dotSpacing;
                 
-                // Draw process circle with appropriate color
-                Paint processPaint = new Paint();
-                if (processes[i] instanceof IOProcess) {
-                    processPaint.setColor(Color.MAGENTA);
-                } else {
-                    processPaint.setColor(Color.CYAN);
-                }
-                canvas.drawCircle(x, startY, circleRadius, processPaint);
-
-                // Draw process ID
-                Paint idPaint = new Paint(textPaint);
-                idPaint.setTextSize(24);
-                idPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
-                String processId = "P" + processes[i].getId();
-                canvas.drawText(processId, x - idPaint.measureText(processId) / 2, 
-                              startY + idPaint.getTextSize() / 3, idPaint);
+                // Vary dot size slightly based on position
+                float dotSize = 3 + (i % 2);
+                canvas.drawCircle(dotX, arrowY, dotSize, dataPaint);
             }
-        }
-
-        // Draw arrows to indicate producer/consumer flow
-        Paint arrowPaint = new Paint();
-        arrowPaint.setColor(Color.BLACK);
-        arrowPaint.setStrokeWidth(3);
-        arrowPaint.setStyle(Paint.Style.STROKE);
-
-        // Consumer arrow (to clients)
-        float arrowY = area.top + area.height() / 2; // Define Y here
-        float consumerArrowStartX = area.right - 40;
-        canvas.drawLine(consumerArrowStartX, arrowY, area.right, arrowY, arrowPaint);
-        canvas.drawLine(area.right - 10, arrowY - 10, area.right, arrowY, arrowPaint);
-        canvas.drawLine(area.right - 10, arrowY + 10, area.right, arrowY, arrowPaint);
-    }
-
-    private void drawClientArea(Canvas canvas) {
-        RectF area = clientArea;
-        Paint clientBgPaint = new Paint();
-        clientBgPaint.setColor(Color.LTGRAY);
-        canvas.drawRect(area, clientBgPaint);
-
-        // Draw "Clients" label slightly above the box, using white paint
-        float clientLabelY = area.top - 10; // Position slightly above the top edge
-        canvas.drawText("Clients", area.left + 10, clientLabelY, whiteLabelPaint);
-
-        // Setup paints for client states
-        Paint idlePaint = new Paint();
-        idlePaint.setColor(Color.GRAY);
-        Paint busyPaint = new Paint();
-        busyPaint.setColor(Color.GREEN);
-        Paint textPaint = new Paint(this.textPaint);
-        textPaint.setTextSize(24);
-        textPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
-
-        // Calculate dimensions for client boxes
-        float boxWidth = 120;
-        float boxHeight = 80;
-        float spacing = 30;
-        float startX = area.left + 20;
-        float startY = area.top + 40;
-
-        // Draw each client
-        List<Client> clients = gameManager.getClients();
-        for (int i = 0; i < clients.size(); i++) {
-            Client client = clients.get(i);
-            float x = startX + (i * (boxWidth + spacing));
-            RectF clientRect = new RectF(x, startY, x + boxWidth, startY + boxHeight);
-
-            // Draw client box with state-dependent color
-            Paint boxPaint = client.isConsuming() ? busyPaint : idlePaint;
-            canvas.drawRect(clientRect, boxPaint);
-
-            // Draw client ID
-            String clientId = "Client " + client.getId();
-            float textX = clientRect.left + (boxWidth - textPaint.measureText(clientId)) / 2;
-            canvas.drawText(clientId, textX, clientRect.top + 30, textPaint);
-
-            // If client is consuming, draw process ID
-            if (client.isConsuming() && client.getCurrentProcess() != null) {
-                String processId = "P" + client.getCurrentProcess().getId();
-                float processTextX = clientRect.left + (boxWidth - textPaint.measureText(processId)) / 2;
-                canvas.drawText(processId, processTextX, clientRect.top + 60, textPaint);
-            }
+            
+            // Draw "DATA ►" label above the connection
+            Paint labelPaint = new Paint();
+            labelPaint.setColor(Color.WHITE);
+            labelPaint.setTextSize(18);
+            labelPaint.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
+            float labelX = bufferRight + (clientLeft - bufferRight) / 2 - 30;
+            float labelY = arrowY - 15;
+            canvas.drawText("DATA ►", labelX, labelY, labelPaint);
         }
     }
-
-     /**
-      * Draws highlights on valid drop zones based on the currently dragged process.
-      */
-     private void drawDropZoneHighlights(Canvas canvas, Process dragged) {
-         if (dragged == null) return;
-
-         Process.ProcessState sourceState = dragged.getCurrentState();
-
-         // Highlight Cores if dropping from Queue OR returning from IO
-         boolean highlightCores = false;
-         if (sourceState == Process.ProcessState.IN_QUEUE) {
-             highlightCores = true;
-         } else if (sourceState == Process.ProcessState.IN_IO && dragged instanceof IOProcess) {
-             IOProcess ioP = (IOProcess) dragged; // Cast here
-             if (ioP.isIoCompleted()) {
-                 highlightCores = true;
-             }
-         }
-
-         if (highlightCores) {
-             for (Map.Entry<Integer, Rect> entry : coreAreaRects.entrySet()) {
-                 Core core = gameManager.getCpuCores().get(entry.getKey());
-                 if (!core.isUtilized()) {
-                      if (sourceState == Process.ProcessState.IN_QUEUE) {
-                          if (gameManager.getMemory().hasEnoughMemory(dragged.getMemoryRequirement())) {
-                              canvas.drawRect(entry.getValue(), dropZoneHighlightPaint);
-                          }
-                      } else { // From IO, memory already allocated
-                          canvas.drawRect(entry.getValue(), dropZoneHighlightPaint);
-                      }
-                 }
-             }
-         }
-
-         // Highlight IO Area if dropping an IO process that needs IO
-         if (sourceState == Process.ProcessState.ON_CORE && dragged instanceof IOProcess) {
-             IOProcess ioP = (IOProcess) dragged; // Cast here
-             if (ioP.isCpuPausedForIO()) {
-                if (!gameManager.getIoArea().isBusy()) {
-                    canvas.drawRect(ioAreaRect, dropZoneHighlightPaint);
-                }
-             }
-         }
-     }
-
 
     // --- Game Lifecycle Methods ---
     public void pause() {
@@ -1196,6 +1740,447 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
              thread.setRunning(true);
              thread.start();
              gameManager.startGame(); 
+        }
+    }
+
+    /**
+     * Draws a terminal-like system console at the bottom of the screen.
+     */
+    private void drawSystemConsole(Canvas canvas, int width, int height) {
+        float consoleHeight = 40;
+        RectF consoleRect = new RectF(0, height - consoleHeight, width, height);
+        
+        // Draw console background
+        Paint consoleBgPaint = new Paint();
+        consoleBgPaint.setColor(Color.BLACK);
+        canvas.drawRect(consoleRect, consoleBgPaint);
+        
+        // Draw terminal text
+        Paint consoleTextPaint = new Paint();
+        consoleTextPaint.setColor(Color.parseColor("#4CAF50")); // Terminal green
+        consoleTextPaint.setTypeface(Typeface.MONOSPACE);
+        consoleTextPaint.setTextSize(16);
+        
+        // Current time
+        long time = System.currentTimeMillis();
+        String timeString = String.format("[%d]", time / 1000);
+        
+        // System status
+        String statusString = String.format("SYSTEM: %s", 
+                                         gameManager.getHealth() > 30 ? "ONLINE" : "WARNING");
+        
+        // Processes info
+        String processString = String.format("PROC: %d", 
+                                          gameManager.getProcessManager().getProcessQueue().size());
+        
+        // Memory info
+        String memoryString = String.format("MEM: %d/%dGB", 
+                                         gameManager.getMemory().getUsedMemory(),
+                                         gameManager.getMemory().getCapacity());
+        
+        // Combine and draw
+        String consoleText = String.format("%s %s %s %s", 
+                                        timeString, statusString, processString, memoryString);
+        canvas.drawText(consoleText, 10, height - 15, consoleTextPaint);
+        
+        // Add static cursor instead of blinking
+        canvas.drawText("_", 10 + consoleTextPaint.measureText(consoleText + " "), 
+                        height - 15, consoleTextPaint);
+    }
+    
+    // Update the draw method to include the system console
+    @Override
+    public void draw(Canvas canvas) {
+        super.draw(canvas);
+        
+        if (canvas == null) {
+            return;
+        }
+
+        // Fill background
+        canvas.drawColor(backgroundPaint.getColor());
+        
+        // Draw game elements
+        drawGame(canvas);
+        
+        // Draw system console at the bottom
+        drawSystemConsole(canvas, getWidth(), getHeight());
+        
+        // Draw game over UI if needed
+        if (isGameOver) {
+            drawGameOverOverlay(canvas);
+        }
+    }
+
+    /**
+     * Provides haptic feedback (vibration) when a user action cannot be completed due to lack of resources
+     */
+    private void vibrateForError() {
+        Context context = getContext();
+        if (context != null) {
+            android.os.Vibrator vibrator = (android.os.Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
+            if (vibrator != null && vibrator.hasVibrator()) {
+                // Check if we're on API 26 or higher for newer vibration API
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                    // Create a sharp, error-like vibration effect
+                    android.os.VibrationEffect errorVibration = android.os.VibrationEffect.createOneShot(
+                        300, // 300ms duration
+                        android.os.VibrationEffect.DEFAULT_AMPLITUDE
+                    );
+                    vibrator.vibrate(errorVibration);
+                } else {
+                    // Legacy vibration for older devices
+                    vibrator.vibrate(300);
+                }
+                
+                Log.d(TAG, "Vibration feedback provided for insufficient resources");
+            }
+        }
+    }
+    
+    /**
+     * Shows a temporary error message when there are insufficient resources
+     */
+    private void showInsufficientResourcesError() {
+        // Set a flag to display an error message
+        isShowingError = true;
+        errorMessage = "Not enough memory!";
+        errorDisplayStartTime = System.currentTimeMillis();
+        
+        // Create a handler to clear the error after a delay
+        android.os.Handler handler = new android.os.Handler();
+        handler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                isShowingError = false;
+                invalidate(); // Trigger redraw
+            }
+        }, 1000); // Show error for 2 seconds
+        
+        // Force a redraw to show the error immediately
+        invalidate();
+    }
+
+    /**
+     * Draws an error message in the center of the screen
+     */
+    private void drawErrorMessage(Canvas canvas) {
+        int width = canvas.getWidth();
+        int height = canvas.getHeight();
+        
+        // Calculate the center position
+        float centerX = width / 2f;
+        float centerY = height / 2f - 100; // Slightly above center
+        
+        // Create a semi-transparent background for the message
+        Paint bgPaint = new Paint();
+        bgPaint.setColor(Color.BLACK);
+        bgPaint.setAlpha(180); // Semi-transparent
+        
+        // Calculate the background dimensions
+        float textWidth = errorMessagePaint.measureText(errorMessage);
+        float padding = 30;
+        RectF bgRect = new RectF(
+            centerX - textWidth/2 - padding,
+            centerY - 60,
+            centerX + textWidth/2 + padding,
+            centerY + 30
+        );
+        
+        // Draw the background with rounded corners
+        canvas.drawRoundRect(bgRect, 20, 20, bgPaint);
+        
+        // Draw the error message text
+        canvas.drawText(errorMessage, centerX, centerY, errorMessagePaint);
+    }
+
+    /**
+     * Draws the client area with improved terminal-style visualization
+     */
+    private void drawClientArea(Canvas canvas) {
+        // Draw client area border
+        Paint borderPaint = new Paint(clientAreaPaint);
+        borderPaint.setStyle(Paint.Style.STROKE);
+        borderPaint.setStrokeWidth(4);
+        
+        // Draw tech-inspired background
+        Paint bgPaint = new Paint();
+        bgPaint.setColor(Color.parseColor("#B71C1C")); // Dark red
+        bgPaint.setStyle(Paint.Style.FILL);
+        canvas.drawRect(clientAreaRect, bgPaint);
+        
+        // Draw circuit pattern in the background
+        Paint circuitPaint = new Paint();
+        circuitPaint.setColor(Color.parseColor("#EF9A9A")); // Light red
+        circuitPaint.setStrokeWidth(1);
+        circuitPaint.setStyle(Paint.Style.STROKE);
+        circuitPaint.setAlpha(40); // Very subtle
+        
+        // Draw pattern lines
+        for (int i = 1; i < 10; i++) {
+            float x = clientAreaRect.left + (clientAreaRect.width() * i / 10f);
+            float y = clientAreaRect.top + (clientAreaRect.height() * i / 10f);
+            canvas.drawLine(clientAreaRect.left, y, clientAreaRect.right, y, circuitPaint);
+            canvas.drawLine(x, clientAreaRect.top, x, clientAreaRect.bottom, circuitPaint);
+        }
+        
+        // Draw title
+        Paint titlePaint = new Paint(textPaint);
+        titlePaint.setTextSize(28);
+        titlePaint.setFakeBoldText(true);
+        titlePaint.setTypeface(Typeface.MONOSPACE);
+        String title = "> Clients";
+        canvas.drawText(title, clientAreaRect.left + 20, clientAreaRect.top + 35, titlePaint);
+        
+        // Get client status from game manager
+        List<Client> clients = gameManager.getClients();
+        
+        // Define layout parameters for client terminals
+        int numClients = clients.size();
+        float terminalWidth = Math.min(180, clientAreaRect.width() / (numClients + 1));
+        float terminalHeight = 120;
+        float terminalSpacing = (clientAreaRect.width() - (terminalWidth * numClients)) / (numClients + 1);
+        float terminalY = clientAreaRect.top + 60;
+        
+        // Draw each client as a terminal window
+        for (int i = 0; i < numClients; i++) {
+            Client client = clients.get(i);
+            boolean isBusy = client.isConsuming();
+            
+            // Calculate terminal position
+            float terminalX = clientAreaRect.left + terminalSpacing + i * (terminalWidth + terminalSpacing);
+            
+            // Draw terminal window
+            RectF terminalRect = new RectF(
+                terminalX, 
+                terminalY, 
+                terminalX + terminalWidth, 
+                terminalY + terminalHeight
+            );
+            
+            // Draw terminal background
+            Paint terminalBgPaint = new Paint();
+            terminalBgPaint.setColor(Color.parseColor("#212121")); // Dark gray
+            canvas.drawRoundRect(terminalRect, 8, 8, terminalBgPaint);
+            
+            // Draw terminal title bar
+            RectF titleBarRect = new RectF(
+                terminalRect.left,
+                terminalRect.top,
+                terminalRect.right,
+                terminalRect.top + 20
+            );
+            Paint titleBarPaint = new Paint();
+            titleBarPaint.setColor(isBusy ? 
+                Color.parseColor("#E53935") : // Red for busy
+                Color.parseColor("#43A047")); // Green for idle
+            canvas.drawRoundRect(new RectF(titleBarRect.left, titleBarRect.top, titleBarRect.right, titleBarRect.top + 8), 
+                                8, 8, titleBarPaint);
+            canvas.drawRect(new RectF(titleBarRect.left, titleBarRect.top + 8, titleBarRect.right, titleBarRect.bottom), 
+                           titleBarPaint);
+            
+            // Draw window control buttons in title bar
+            float buttonRadius = 3;
+            float buttonY = titleBarRect.top + 10;
+            float buttonSpacing = 10;
+            
+            // Close button (red)
+            Paint closeButtonPaint = new Paint();
+            closeButtonPaint.setColor(Color.parseColor("#FF5252"));
+            canvas.drawCircle(titleBarRect.left + 10, buttonY, buttonRadius, closeButtonPaint);
+            
+            // Minimize button (yellow)
+            Paint minButtonPaint = new Paint();
+            minButtonPaint.setColor(Color.parseColor("#FFEB3B"));
+            canvas.drawCircle(titleBarRect.left + 10 + buttonSpacing, buttonY, buttonRadius, minButtonPaint);
+            
+            // Maximize button (green)
+            Paint maxButtonPaint = new Paint();
+            maxButtonPaint.setColor(Color.parseColor("#4CAF50"));
+            canvas.drawCircle(titleBarRect.left + 10 + 2 * buttonSpacing, buttonY, buttonRadius, maxButtonPaint);
+            
+            // Draw client title
+            Paint clientTitlePaint = new Paint();
+            clientTitlePaint.setColor(Color.WHITE);
+            clientTitlePaint.setTextSize(14);
+            clientTitlePaint.setTextAlign(Paint.Align.CENTER);
+            clientTitlePaint.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
+            canvas.drawText("Client " + i, terminalRect.centerX(), titleBarRect.bottom - 5, clientTitlePaint);
+            
+            // Draw terminal content
+            RectF contentRect = new RectF(
+                terminalRect.left + 5,
+                titleBarRect.bottom + 5,
+                terminalRect.right - 5,
+                terminalRect.bottom - 5
+            );
+            
+            // Draw terminal screen (darker background)
+            Paint screenPaint = new Paint();
+            screenPaint.setColor(Color.parseColor("#1A1A1A")); // Very dark gray
+            canvas.drawRect(contentRect, screenPaint);
+            
+            // Draw terminal content based on client state
+            if (isBusy) {
+                // Busy processing - show activity graph
+                drawClientActivityGraph(canvas, contentRect, client);
+            } else {
+                // Idle - show blinking cursor
+                Paint cursorPaint = new Paint();
+                cursorPaint.setColor(Color.parseColor("#FFFFFF")); // White
+                cursorPaint.setTextSize(16);
+                cursorPaint.setTypeface(Typeface.MONOSPACE);
+                
+                // Only show cursor at fixed intervals for stability
+                long timestamp = System.currentTimeMillis();
+                boolean showCursor = (timestamp / 500) % 2 == 0;
+                
+                canvas.drawText("$>", contentRect.left + 5, contentRect.top + 20, cursorPaint);
+                if (showCursor) {
+                    canvas.drawText("_", contentRect.left + 25, contentRect.top + 20, cursorPaint);
+                }
+                
+                // Draw "Ready" text
+                Paint readyPaint = new Paint(cursorPaint);
+                readyPaint.setTextSize(14);
+                readyPaint.setColor(Color.parseColor("#4CAF50")); // Green
+                canvas.drawText("[READY]", contentRect.left + 5, contentRect.bottom - 10, readyPaint);
+            }
+            
+            // Draw client status label below the terminal
+            Paint statusPaint = new Paint();
+            statusPaint.setTextSize(16);
+            statusPaint.setTextAlign(Paint.Align.CENTER);
+            statusPaint.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
+            
+            String statusText = isBusy ? "PROCESSING" : "IDLE";
+            statusPaint.setColor(isBusy ? Color.parseColor("#FF8A80") : Color.parseColor("#B9F6CA"));
+            canvas.drawText(statusText, terminalRect.centerX(), terminalRect.bottom + 20, statusPaint);
+        }
+    }
+    
+    /**
+     * Draws an activity graph in the client terminal when busy
+     */
+    private void drawClientActivityGraph(Canvas canvas, RectF rect, Client client) {
+        // Draw grid lines
+        Paint gridPaint = new Paint();
+        gridPaint.setColor(Color.parseColor("#424242")); // Dark gray
+        gridPaint.setStrokeWidth(1);
+        
+        // Horizontal grid lines
+        for (int i = 1; i < 4; i++) {
+            float y = rect.top + (rect.height() * i / 4);
+            canvas.drawLine(rect.left, y, rect.right, y, gridPaint);
+        }
+        
+        // Vertical grid lines
+        for (int i = 1; i < 6; i++) {
+            float x = rect.left + (rect.width() * i / 6);
+            canvas.drawLine(x, rect.top, x, rect.bottom, gridPaint);
+        }
+        
+        // Draw CPU usage graph
+        Paint graphPaint = new Paint();
+        graphPaint.setColor(Color.parseColor("#FF5252")); // Red
+        graphPaint.setStrokeWidth(2);
+        graphPaint.setStyle(Paint.Style.STROKE);
+        
+        // Get client process for remaining time
+        Process p = client.getCurrentProcess();
+        if (p != null) {
+            // Calculate a simple estimate for consumption progress
+            // This is a replacement for the missing getConsumptionProgressRatio method
+            float progressRatio = 0.5f; // Default to 50% if we can't calculate
+            
+            // Draw activity line
+            Path graphPath = new Path();
+            float startX = rect.left + 5;
+            float endX = rect.right - 5;
+            float height = rect.height() - 10;
+            
+            graphPath.moveTo(startX, rect.bottom - 5);
+            
+            // Add some randomness to the graph to make it look like activity
+            for (int i = 0; i < 20; i++) {
+                float x = startX + (endX - startX) * i / 19f;
+                // Combine progress with random variation
+                float randomVariation = (float) (Math.sin(i * 0.5) * 0.1) + (float)(Math.random() * 0.05);
+                float ratio = Math.max(0.1f, Math.min(0.9f, progressRatio + randomVariation));
+                float y = rect.bottom - 5 - (height * ratio);
+                graphPath.lineTo(x, y);
+            }
+            
+            canvas.drawPath(graphPath, graphPaint);
+            
+            // Draw process info
+            Paint infoPaint = new Paint();
+            infoPaint.setColor(Color.parseColor("#FFFFFF"));
+            infoPaint.setTextSize(12);
+            infoPaint.setTypeface(Typeface.MONOSPACE);
+            
+            // Show process ID being consumed
+            canvas.drawText("PROC: P" + p.getId(), rect.left + 5, rect.top + 15, infoPaint);
+            
+            // Show consumption progress percentage - use fixed value
+            int percent = 50; // Default 50%
+            canvas.drawText("PROG: " + percent + "%", rect.left + 5, rect.top + 30, infoPaint);
+        } else {
+            // Should not happen, but just in case
+            Paint errorPaint = new Paint();
+            errorPaint.setColor(Color.RED);
+            errorPaint.setTextSize(14);
+            canvas.drawText("ERROR", rect.centerX() - 20, rect.centerY(), errorPaint);
+        }
+    }
+
+    /**
+     * Highlights valid drop zones based on the type of process being dragged.
+     * Different zones are highlighted depending on the current state of the process.
+     */
+    private void drawDropZoneHighlights(Canvas canvas, Process process) {
+        if (process == null) return;
+        
+        Process.ProcessState state = process.getCurrentState();
+        
+        // Different highlighting logic based on process state
+        switch (state) {
+            case IN_QUEUE:
+                // When dragging from queue, highlight all cores
+                for (Map.Entry<Integer, Rect> entry : coreAreaRects.entrySet()) {
+                    Core core = gameManager.getCpuCores().get(entry.getKey());
+                    if (!core.isUtilized()) {
+                        // Only highlight empty cores
+                        canvas.drawRect(entry.getValue(), dropZoneHighlightPaint);
+                    }
+                }
+                break;
+                
+            case ON_CORE:
+                // For IO processes that are waiting for IO, highlight the IO area
+                if (process instanceof IOProcess) {
+                    IOProcess ioProcess = (IOProcess) process;
+                    if (ioProcess.isCpuPausedForIO()) {
+                        canvas.drawRect(ioAreaRect, dropZoneHighlightPaint);
+                    }
+                }
+                break;
+                
+            case IN_IO:
+                // For completed IO processes, highlight all cores
+                if (process instanceof IOProcess) {
+                    IOProcess ioProcess = (IOProcess) process;
+                    if (ioProcess.isIoCompleted()) {
+                        for (Map.Entry<Integer, Rect> entry : coreAreaRects.entrySet()) {
+                            Core core = gameManager.getCpuCores().get(entry.getKey());
+                            if (!core.isUtilized()) {
+                                // Only highlight empty cores
+                                canvas.drawRect(entry.getValue(), dropZoneHighlightPaint);
+                            }
+                        }
+                    }
+                }
+                break;
         }
     }
 

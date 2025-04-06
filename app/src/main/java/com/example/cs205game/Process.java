@@ -84,6 +84,15 @@ public class Process {
         return bufferCooldownRemainingS; // Return remaining cooldown time
     }
 
+    /**
+     * Returns the ratio of remaining patience to initial patience.
+     * @return A value between 0.0 and 1.0 representing the remaining patience ratio.
+     */
+    public double getRemainingPatienceRatio() {
+        if (initialPatience <= 0) return 0;
+        return Math.max(0, Math.min(1, patienceCounter / initialPatience));
+    }
+
     // --- Setters / Modifiers ---
     public void setCurrentState(ProcessState newState) {
         this.currentState = newState;

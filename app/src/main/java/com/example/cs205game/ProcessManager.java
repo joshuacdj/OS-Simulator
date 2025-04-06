@@ -11,7 +11,7 @@ public class ProcessManager {
     private static final int MAX_QUEUE_CAPACITY = 10;
     private static final double MIN_SPAWN_INTERVAL = 3.0; // Minimum time between spawns
     private static final double MAX_SPAWN_INTERVAL = 5.0; // Maximum time between spawns
-    private static final double IO_PROCESS_PROBABILITY = 0.3; // 30% chance for IO process
+    private static final double IO_PROCESS_PROBABILITY = 0.5; // 50% chance for IO process (increased from 30%)
     private static final double BASE_PATIENCE_S = 15.0; // Base patience for processes
     private static final double MIN_CPU_TIME_S = 4.0; // Minimum CPU time
     private static final double MAX_CPU_TIME_S = 8.0; // Maximum CPU time
@@ -89,18 +89,25 @@ public class ProcessManager {
         Process newProcess;
         
         if (isIOProcess) {
-            newProcess = new IOProcess(
-                4 + random.nextInt(5),  // Memory: 4-8 GB (increased from 3-6)
-                BASE_PATIENCE_S,        // Patience
-                3 + random.nextInt(4),  // CPU Time: 3-6 seconds
-                2 + random.nextInt(3)   // IO Time: 2-4 seconds
-            );
+            // Create an IO process with higher memory requirements
+            int memory = 4 + random.nextInt(5);  // Memory: 4-8 GB
+            double patience = BASE_PATIENCE_S;
+            double cpuTime = 3 + random.nextDouble() * 3;  // CPU Time: 3-6 seconds
+            double ioTime = 2 + random.nextDouble() * 3;   // IO Time: 2-5 seconds
+            
+            newProcess = new IOProcess(memory, patience, cpuTime, ioTime);
+            Log.d(TAG, "Spawned IO Process with memory: " + memory + "GB, CPU time: " + 
+                   String.format("%.1f", cpuTime) + "s, IO time: " + 
+                   String.format("%.1f", ioTime) + "s");
         } else {
-            newProcess = new Process(
-                1 + random.nextInt(3),  // Memory: 1-3 GB (unchanged)
-                BASE_PATIENCE_S,        // Patience
-                2 + random.nextInt(3)   // CPU Time: 2-4 seconds
-            );
+            // Create a regular process
+            int memory = 1 + random.nextInt(3);  // Memory: 1-3 GB
+            double patience = BASE_PATIENCE_S;
+            double cpuTime = 2 + random.nextDouble() * 2;  // CPU Time: 2-4 seconds
+            
+            newProcess = new Process(memory, patience, cpuTime);
+            Log.d(TAG, "Spawned Regular Process with memory: " + memory + 
+                   "GB, CPU time: " + String.format("%.1f", cpuTime) + "s");
         }
         
         processQueue.offer(newProcess);

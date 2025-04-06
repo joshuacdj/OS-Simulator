@@ -2,4 +2,21 @@
 <resources>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
+    
+    <!-- Tech Theme Colors -->
+    <color name="tech_background">#121212</color>
+    <color name="tech_surface">#1E1E1E</color>
+    <color name="tech_primary">#4CAF50</color>
+    <color name="tech_secondary">#03A9F4</color>
+    <color name="tech_accent">#FF4081</color>
+    
+    <!-- Process Colors -->
+    <color name="process_color">#3949AB</color>
+    <color name="io_process_color">#00897B</color>
+    <color name="core_color">#303F9F</color>
+    <color name="io_area_color">#00796B</color>
+    <color name="buffer_color">#5E35B1</color>
+    <color name="client_area_color">#C62828</color>
+    <color name="text_color">#FFFFFF</color>
+    <color name="highlight_color">#4CAF50</color>
 </resources>

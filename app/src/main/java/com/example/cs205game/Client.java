@@ -33,7 +33,7 @@ public class Client implements Runnable {
 
                     // check if still running after sleep
                     if (running) {
-                        // notify gamemanager that consumption is complete
+                        // notify game manager that consumption is complete
                         gameManager.handleClientConsumed(id, process);
                     }
                     currentlyConsumingProcess = null; // clear current process

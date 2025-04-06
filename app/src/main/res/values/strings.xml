@@ -1,3 +1,8 @@
 <resources>
-    <string name="app_name">CS205game</string>
+    <string name="app_name">OS Simulator</string>
+    <string name="main_title">Operating System Simulator</string>
+    <string name="start_game">Start System</string>
+    <string name="how_to_play">System Manual</string>
+    <string name="credits">System Credits</string>
+    <string name="quit">Shutdown</string>
 </resources>
