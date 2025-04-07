@@ -487,7 +487,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
                     if (thread != null) {
                         thread.setRunning(false);
                     }
-                } else {
+                    } else {
                     // Resume the game
                     if (thread != null && !thread.isAlive()) {
                         thread = new GameThread(getHolder(), this);
@@ -594,7 +594,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
     public void update(double deltaTime) {
         // Don't update game state when paused
         if (isPaused) {
-            return;
+                return;
         }
         
         if (!isGameOver) { // Only update game logic if not game over
@@ -1158,7 +1158,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
         
         // Draw Score
         canvas.drawText("Score: " + gameManager.getScore(), area.left + 20, area.centerY() + textPaint.getTextSize()/3, textPaint);
-        
+
         // Draw Health Bar
         int barMaxHeight = area.height() - 20;
         int barWidth = area.width() / 3;
@@ -1207,8 +1207,8 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
             }
         }
         
-        canvas.drawText("HP", healthBgRect.centerX() - labelPaint.measureText("HP")/2,
-                healthBgRect.centerY() + labelPaint.getTextSize()/3, labelPaint);
+        canvas.drawText("HP", healthBgRect.centerX() - labelPaint.measureText("HP")/2, 
+                       healthBgRect.centerY() + labelPaint.getTextSize()/3, labelPaint);
     }
 
     private void drawMemory(Canvas canvas, Rect area) {
@@ -1589,7 +1589,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
             if (cooldownProgress >= 1.0f) {
                 // Ready for consumption - bright color
                 chipPaint.setColor(Color.parseColor("#7C4DFF")); // Bright purple
-            } else {
+                } else {
                 // Still cooling down - darker color
                 chipPaint.setColor(Color.parseColor("#5E35B1")); // Darker purple
             }
@@ -1621,9 +1621,9 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
                 processRect.top + 3
             );
             canvas.drawRoundRect(notchRect, 3, 3, pinPaint);
-            
-            // Draw process ID
-            Paint idPaint = new Paint(textPaint);
+
+                // Draw process ID
+                Paint idPaint = new Paint(textPaint);
             idPaint.setTextSize(20);
             idPaint.setColor(Color.WHITE);
             idPaint.setTextAlign(Paint.Align.CENTER);
@@ -1869,7 +1869,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
         textPaint.setTextSize(22);
         textPaint.setTextAlign(Paint.Align.CENTER);
         textPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
-        
+
         String buttonText = isPaused ? "PLAY" : "PAUSE";
         canvas.drawText(buttonText, pauseButtonRect.centerX(), pauseButtonRect.bottom + 30, textPaint);
         
@@ -2246,8 +2246,8 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
             canvas.drawText(statusText, terminalRect.centerX(), terminalRect.bottom + 20, statusPaint);
         }
     }
-    
-    /**
+
+     /**
      * Draws an activity graph in the client terminal when busy
      */
     private void drawClientActivityGraph(Canvas canvas, RectF rect, Client client) {
@@ -2335,12 +2335,12 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
         switch (state) {
             case IN_QUEUE:
                 // When dragging from queue, highlight all cores
-                for (Map.Entry<Integer, Rect> entry : coreAreaRects.entrySet()) {
-                    Core core = gameManager.getCpuCores().get(entry.getKey());
-                    if (!core.isUtilized()) {
+             for (Map.Entry<Integer, Rect> entry : coreAreaRects.entrySet()) {
+                 Core core = gameManager.getCpuCores().get(entry.getKey());
+                 if (!core.isUtilized()) {
                         // Only highlight empty cores
-                        canvas.drawRect(entry.getValue(), dropZoneHighlightPaint);
-                    }
+                              canvas.drawRect(entry.getValue(), dropZoneHighlightPaint);
+                          }
                 }
                 break;
                 
@@ -2363,9 +2363,9 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
                             Core core = gameManager.getCpuCores().get(entry.getKey());
                             if (!core.isUtilized()) {
                                 // Only highlight empty cores
-                                canvas.drawRect(entry.getValue(), dropZoneHighlightPaint);
-                            }
-                        }
+                          canvas.drawRect(entry.getValue(), dropZoneHighlightPaint);
+                      }
+                 }
                     }
                 }
                 break;
@@ -2393,7 +2393,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
             Process p = core.getCurrentProcess();
             if (p != null && p instanceof IOProcess) {
                 IOProcess ioP = (IOProcess) p;
-                if (ioP.isCpuPausedForIO()) {
+             if (ioP.isCpuPausedForIO()) {
                     RectF pBounds = getProcessVisualBoundsOnCore(core.getId(), p);
                     if (pBounds != null && pBounds.contains(x, y)) {
                         return p;

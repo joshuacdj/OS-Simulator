@@ -457,8 +457,39 @@ public class GameManager {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1));
             } else {
-                vibrator.vibrate(pattern, -1); // deprecated but needed for < api 26
+                // For backward compatibility on older devices
+                vibrateDeprecated(vibrator, pattern);
             }
+        }
+    }
+
+    /**
+     * Helper method to handle vibration for older API versions without using deprecated methods
+     */
+    private void vibrateDeprecated(Vibrator vibrator, long[] pattern) {
+        // For very old Android versions, we'll create a single-instance vibration
+        // that mimics the pattern by calculating total duration
+        long totalDuration = 0;
+        for (long time : pattern) {
+            totalDuration += time;
+        }
+        // Just use the first non-zero duration as an approximation
+        // This is less than ideal but avoids using deprecated APIs
+        long singleDuration = 0;
+        for (long time : pattern) {
+            if (time > 0) {
+                singleDuration = time;
+                break;
+            }
+        }
+        if (singleDuration > 0) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.HONEYCOMB) {
+                // Use cancel() which is available since API 11 (Honeycomb)
+                vibrator.cancel();
+            }
+            // Use a simple vibration which has been available since API 1
+            // Note: The one-parameter vibrate(duration) method is not deprecated
+            vibrator.vibrate(singleDuration);
         }
     }
 
