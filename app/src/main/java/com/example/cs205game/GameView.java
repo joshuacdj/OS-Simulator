@@ -71,6 +71,24 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
     private Paint buttonPaint;
     private Paint buttonTextPaint;
 
+    // --- Health Animation State ---
+    private int lastHealth = -1; // Initial value to force first animation
+    private boolean isHealthAnimating = false;
+    private long healthAnimationStartTime = 0;
+    private static final long HEALTH_ANIMATION_DURATION_MS = 1000; // Animation lasts 1 second
+    private Paint healthFlashPaint;
+    private boolean isScreenFlashing = false;
+    private Paint screenFlashPaint;
+    private static final int SIGNIFICANT_HEALTH_DROP = 10; // Health drop that triggers screen flash
+    
+    // --- Damage Indicator ---
+    private boolean showDamageIndicator = false;
+    private String damageText = "";
+    private float damageTextX, damageTextY;
+    private Paint damageTextPaint;
+    private long damageIndicatorStartTime = 0;
+    private static final long DAMAGE_INDICATOR_DURATION_MS = 1500; // 1.5 seconds
+
     // --- Drag and Drop State ---
     private Process draggingProcess = null;
     private PointF dragStartOffset = null;
@@ -121,6 +139,16 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
     private long errorDisplayStartTime;
     private final Paint errorMessagePaint;
 
+    // --- Pause Button State ---
+    private boolean isPaused = false;
+    private RectF pauseButtonRect = new RectF();
+    private Paint pauseButtonPaint;
+    private Paint pauseButtonTextPaint;
+    private Paint pauseOverlayPaint;
+    private Paint pauseMenuPaint;
+    private RectF resumeButtonRect = new RectF();
+    private RectF quitFromPauseRect = new RectF();
+
     public GameView(Context context) {
         this(context, null);
     }
@@ -162,10 +190,10 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
         // Initialize error message paint
         errorMessagePaint = new Paint();
         errorMessagePaint.setColor(Color.RED);
-        errorMessagePaint.setTextSize(48f);
+        errorMessagePaint.setTextSize(30);
         errorMessagePaint.setTextAlign(Paint.Align.CENTER);
         errorMessagePaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
-        
+
         Log.i(TAG, "GameView created");
 
         // Game Over Paints
@@ -224,6 +252,48 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
         
         textPaint2 = new Paint(textPaint);
         textPaint2.setTextSize(18);
+
+        // Health flash paint for animations
+        healthFlashPaint = new Paint();
+        healthFlashPaint.setColor(Color.RED);
+        healthFlashPaint.setStyle(Paint.Style.FILL);
+        healthFlashPaint.setAlpha(0); // Start transparent
+
+        // Screen flash for significant health drops
+        screenFlashPaint = new Paint();
+        screenFlashPaint.setColor(Color.RED);
+        screenFlashPaint.setStyle(Paint.Style.FILL);
+        screenFlashPaint.setAlpha(0); // Start transparent
+        
+        // Damage indicator text
+        damageTextPaint = new Paint();
+        damageTextPaint.setColor(Color.RED);
+        damageTextPaint.setTextSize(40);
+        damageTextPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+        damageTextPaint.setTextAlign(Paint.Align.CENTER);
+        damageTextPaint.setAlpha(255);
+
+        // Initialize game state
+        isGameOver = false;
+
+        // Pause button paints
+        pauseButtonPaint = new Paint();
+        pauseButtonPaint.setColor(Color.parseColor("#303F9F")); // Indigo
+        pauseButtonPaint.setStyle(Paint.Style.FILL);
+        
+        pauseButtonTextPaint = new Paint();
+        pauseButtonTextPaint.setColor(Color.WHITE);
+        pauseButtonTextPaint.setTextSize(30f);
+        pauseButtonTextPaint.setTextAlign(Paint.Align.CENTER);
+        pauseButtonTextPaint.setTypeface(Typeface.create(Typeface.MONOSPACE, Typeface.BOLD));
+        
+        pauseOverlayPaint = new Paint();
+        pauseOverlayPaint.setColor(Color.BLACK);
+        pauseOverlayPaint.setAlpha(150); // Semi-transparent overlay
+        
+        pauseMenuPaint = new Paint();
+        pauseMenuPaint.setColor(Color.parseColor("#212121")); // Dark gray
+        pauseMenuPaint.setStyle(Paint.Style.FILL);
     }
 
     /**
@@ -385,41 +455,93 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
     @SuppressLint("ClickableViewAccessibility")
     @Override
     public boolean onTouchEvent(MotionEvent event) {
-        if (gameManager == null) return false;
-
-        float x = event.getX();
-        float y = event.getY();
+        int x = (int) event.getX();
+        int y = (int) event.getY();
         int action = event.getAction();
 
-        // Handle Game Over screen interactions first if active
+        // Handle game over UI actions
         if (isGameOver) {
-            if (action == MotionEvent.ACTION_DOWN) { // Check for tap start
+            if (action == MotionEvent.ACTION_DOWN) {
                 if (retryButtonRect.contains(x, y)) {
-                    Log.i(TAG, "Retry button tapped - Restarting Activity.");
-                    // Restart the GameActivity
-                    Context context = getContext();
-                    if (context instanceof Activity) {
-                        ((Activity) context).recreate();
-                    } else {
-                         Log.e(TAG, "Context is not an Activity, cannot restart.");
-                    }
-                    return true; // Consume the event
+                    // Retry button pressed
+                    // Reset the game state
+                    ((Activity) getContext()).recreate();
+                    return true;
                 } else if (quitButtonRect.contains(x, y)) {
-                    Log.i(TAG, "Quit button tapped.");
-                    // Implement actual quit logic (e.g., navigate back to title or finish)
-                    Context context = getContext();
-                    if (context instanceof Activity) {
-                        ((Activity) context).finish(); // Close the current activity
-                    } else {
-                         Log.e(TAG, "Context is not an Activity, cannot finish.");
-                    }
-                    return true; // Consume the event
+                    // Quit button pressed
+                    // Return to title screen
+                    ((Activity) getContext()).finish();
+                    return true;
                 }
             }
-            return true; // Consume all touch events while game over overlay is shown
+            return true; // Consume all touches in game over state
+        }
+        
+        // Handle pause button and pause overlay actions
+        if (action == MotionEvent.ACTION_DOWN) {
+            // Check if pause button was clicked
+            if (pauseButtonRect.contains(x, y)) {
+                isPaused = !isPaused;
+                if (isPaused) {
+                    // Pause the game
+                    if (thread != null) {
+                        thread.setRunning(false);
+                    }
+                } else {
+                    // Resume the game
+                    if (thread != null && !thread.isAlive()) {
+                        thread = new GameThread(getHolder(), this);
+                        thread.setRunning(true);
+                        thread.start();
+                    } else if (thread != null) {
+                        thread.setRunning(true);
+                    }
+                }
+                invalidate(); // Redraw to show pause/resume state
+                return true;
+            }
+            
+            // Handle pause menu buttons when paused
+            if (isPaused) {
+                // Check if resume button was clicked
+                if (resumeButtonRect.contains(x, y)) {
+                    isPaused = false;
+                    // Resume the game
+                    if (thread != null && !thread.isAlive()) {
+                        thread = new GameThread(getHolder(), this);
+                        thread.setRunning(true);
+                        thread.start();
+                    } else if (thread != null) {
+                        thread.setRunning(true);
+                    }
+                    invalidate();
+                    return true;
+                }
+                
+                // Check if quit button was clicked
+                if (quitFromPauseRect.contains(x, y)) {
+                    // Return to the title screen
+                    ((Activity) getContext()).finish();
+                    return true;
+                }
+                
+                // Don't process other touch events when paused
+                return true;
+            }
         }
 
-        // --- Existing Touch Handling for Gameplay ---
+        // Handle drag and drop operations (only when not paused)
+        return handleDragAndDrop(event);
+    }
+    
+    /**
+     * Handles drag and drop operations for processes
+     */
+    private boolean handleDragAndDrop(MotionEvent event) {
+        int x = (int) event.getX();
+        int y = (int) event.getY();
+        int action = event.getAction();
+        
         switch (action) {
             case MotionEvent.ACTION_DOWN:
                 draggingProcess = findDraggableProcessAt(x, y);
@@ -469,179 +591,12 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
         return false;
     }
 
-    
-    private Process findDraggableProcessAt(float x, float y) {
-        // 1. Check processes in the queue (only the head is draggable)
-        Process headProcess = gameManager.getProcessManager().getProcessQueue().peek();
-        if (headProcess != null) {
-            Rect headRect = queueProcessRects.get(headProcess.getId());
-            if (headRect != null && headRect.contains((int) x, (int) y)) {
-                 if (gameManager.getProcessManager().isProcessAtHead(headProcess.getId())) {
-                    return headProcess;
-                 } else { 
-                     Log.w(TAG, "Attempted to drag non-head process: " + headProcess.getId());
-                     // TODO: Show brief error feedback (e.g., flash red)?
-                 }
-            }
-        }
-
-        // 2. Check processes on cores that require IO interaction
-        for (Map.Entry<Integer, Rect> entry : coreAreaRects.entrySet()) {
-            Core core = gameManager.getCpuCores().get(entry.getKey());
-            Process p = core.getCurrentProcess();
-            if (p != null && p instanceof IOProcess) {
-                IOProcess ioP = (IOProcess) p;
-                if (ioP.isCpuPausedForIO()) {
-                    RectF pBounds = getProcessVisualBoundsOnCore(core.getId(), p);
-                    if (pBounds != null && pBounds.contains(x, y)) {
-                        return p;
-                    }
-                    else if (entry.getValue().contains((int) x, (int) y)) {
-                        Log.w(TAG, "Hit core area for IO process, not specific bounds");
-                        return p;
-                    }
-                }
-            }
-        }
-
-        // 3. Check process in the IO Area if it's completed IO
-        Process pInIO = gameManager.getIoArea().getCurrentProcess();
-        if (pInIO != null && pInIO instanceof IOProcess) {
-            IOProcess ioP = (IOProcess) pInIO;
-            if (ioP.isIoCompleted()) {
-                RectF pBounds = getProcessVisualBoundsInIO(pInIO);
-                if (pBounds != null && pBounds.contains(x, y)) {
-                    return pInIO;
-                }
-                else if (ioAreaRect.contains((int) x, (int) y)) {
-                    Log.w(TAG, "Hit IO area for completed IO process, not specific bounds");
-                    return pInIO;
-                }
-            }
-        }
-
-        return null;
-    }
-
-    
-     private RectF getProcessVisualBounds(Process process) { // Return RectF now
-        if (process == null) return null;
-
-        Rect intRect = null;
-        RectF floatRect = null;
-
-        // Check queue
-        intRect = queueProcessRects.get(process.getId());
-        if (intRect != null) return new RectF(intRect);
-
-        // Check cores
-        int coreId = findCoreIdForProcess(process.getId());
-        if (coreId != -1) {
-            return getProcessVisualBoundsOnCore(coreId, process);
-        }
-
-        // Check IO Area
-        if (gameManager.getIoArea().getCurrentProcess() != null && gameManager.getIoArea().getCurrentProcess().getId() == process.getId()) {
-            return getProcessVisualBoundsInIO(process);
-        }
-
-        return null; 
-     }
-
-    // Helper to calculate visual bounds of a process *drawn on* a specific core
-    private RectF getProcessVisualBoundsOnCore(int coreId, Process p) {
-        Rect coreRect = coreAreaRects.get(coreId);
-        if (coreRect == null || p == null) return null;
-
-        float pWidth = processOnCoreWidth;
-        float pHeight = processOnCoreHeight;
-        float pLeft = coreRect.centerX() - pWidth / 2;
-        float pTop = coreRect.centerY() - pHeight / 2 - 15; // Matches drawing logic
-        return new RectF(pLeft, pTop, pLeft + pWidth, pTop + pHeight);
-    }
-
-     // Helper to calculate visual bounds of a process *drawn in* the IO Area
-     private RectF getProcessVisualBoundsInIO(Process p) {
-         if (p == null) return null;
-         float pWidth = processInIoWidth;
-         float pHeight = processInIoHeight;
-         float pLeft = ioAreaRect.centerX() - pWidth / 2;
-         float pTop = ioAreaRect.centerY() - pHeight / 2 - 15; // Matches drawing logic
-         return new RectF(pLeft, pTop, pLeft + pWidth, pTop + pHeight);
-     }
-
-     
-     private int findCoreIdForProcess(int processId) {
-         for(Core core : gameManager.getCpuCores()) {
-             if(core.isUtilized() && core.getCurrentProcess() != null && core.getCurrentProcess().getId() == processId) {
-                 return core.getId();
-             }
-         }
-         return -1; 
-     }
-
-    
-    private void handleDrop(Process droppedProcess, float dropX, float dropY) {
-        Process.ProcessState sourceState = droppedProcess.getCurrentState();
-
-        // Check drop target: Cores
-        for (Map.Entry<Integer, Rect> entry : coreAreaRects.entrySet()) {
-            int coreId = entry.getKey();
-            Rect coreRect = entry.getValue();
-            if (coreRect.contains((int) dropX, (int) dropY)) {
-                Log.d(TAG, "Dropped Process " + droppedProcess.getId() + " onto Core " + coreId);
-                if (sourceState == Process.ProcessState.IN_QUEUE) {
-                    if (gameManager.getProcessManager().isProcessAtHead(droppedProcess.getId())) {
-                        // Check if there's enough memory to allocate the process
-                        if (!gameManager.getMemory().hasEnoughMemory(droppedProcess.getMemoryRequirement())) {
-                            // Not enough memory - provide vibration feedback
-                            vibrateForError();
-                            showInsufficientResourcesError();
-                        } else {
-                            gameManager.moveProcessFromQueueToCore(droppedProcess.getId(), coreId);
-                        }
-                    } else {
-                        Log.e(TAG, "FCFS Error on drop - Process " + droppedProcess.getId() + " no longer at head.");
-                    }
-                } else if (sourceState == Process.ProcessState.IN_IO && droppedProcess instanceof IOProcess) {
-                    IOProcess ioP = (IOProcess) droppedProcess;
-                    if (ioP.isIoCompleted()) {
-                        gameManager.moveProcessFromIOToCore(droppedProcess.getId(), coreId);
-                    } else {
-                         Log.w(TAG, "Invalid drop onto Core " + coreId + ": IO Process from IO area not completed IO.");
-                    }
-                } else {
-                     Log.w(TAG, "Invalid drop onto Core " + coreId + " from state " + sourceState);
-                }
-                return;
-            }
-        }
-
-        // Check drop target: IO Area
-        if (ioAreaRect.contains((int) dropX, (int) dropY)) {
-             Log.d(TAG, "Dropped Process " + droppedProcess.getId() + " onto IO Area");
-             if (sourceState == Process.ProcessState.ON_CORE && droppedProcess instanceof IOProcess) {
-                 IOProcess ioP = (IOProcess) droppedProcess;
-                 if (ioP.isCpuPausedForIO()) {
-                    int sourceCoreId = (originalSourceCoreId != -1) ? originalSourceCoreId : findCoreIdForProcess(droppedProcess.getId());
-                    if (sourceCoreId != -1) {
-                        gameManager.moveProcessFromCoreToIO(droppedProcess.getId(), sourceCoreId);
-                    } else {
-                        Log.e(TAG, "Could not find source core for IO process drop?");
-                    }
-                 } else {
-                     Log.w(TAG, "Invalid drop onto IO Area: IOProcess on core is not paused for IO.");
-                 }
-             } else {
-                 Log.w(TAG, "Invalid drop onto IO Area from state " + sourceState + " or not an IOProcess.");
-             }
-             return;
-        }
-
-        Log.d(TAG, "Process " + droppedProcess.getId() + " dropped onto invalid area.");
-    }
-
     public void update(double deltaTime) {
+        // Don't update game state when paused
+        if (isPaused) {
+            return;
+        }
+        
         if (!isGameOver) { // Only update game logic if not game over
             gameManager.update(deltaTime);
             // Check if game over condition is met *after* updating game state
@@ -1116,7 +1071,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
                 // Draw the path
                 canvas.drawPath(borderPath, borderPaint);
             }
-        }
+         }
     }
 
      /** Overload to draw process at a specific position with specific size (used for dragging) */
@@ -1174,15 +1129,43 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
     }
 
     private void drawScoreHealth(Canvas canvas, Rect area) {
+        // Check if health has changed
+        int currentHealth = gameManager.getHealth();
+        if (lastHealth == -1) {
+            // First time - just initialize
+            lastHealth = currentHealth;
+        } else if (currentHealth < lastHealth) {
+            // Calculate health lost
+            int healthLost = lastHealth - currentHealth;
+            
+            // Health decreased - start animation
+            isHealthAnimating = true;
+            healthAnimationStartTime = System.currentTimeMillis();
+            
+            // Create damage indicator
+            showDamageIndicator = true;
+            damageText = "-" + healthLost + " HP";
+            damageTextX = area.right - 60;
+            damageTextY = area.centerY();
+            damageIndicatorStartTime = System.currentTimeMillis();
+            
+            // If health drop is significant, also flash the screen
+            if (healthLost >= SIGNIFICANT_HEALTH_DROP) {
+                isScreenFlashing = true;
+            }
+        }
+        lastHealth = currentHealth;
+        
         // Draw Score
         canvas.drawText("Score: " + gameManager.getScore(), area.left + 20, area.centerY() + textPaint.getTextSize()/3, textPaint);
-
+        
         // Draw Health Bar
         int barMaxHeight = area.height() - 20;
         int barWidth = area.width() / 3;
         int barHeight = Math.min(40, barMaxHeight);
         int barLeft = area.right - barWidth - 20;
         int barTop = area.centerY() - barHeight/2;
+        
         Rect healthBgRect = tempRect;
         healthBgRect.set(barLeft, barTop, barLeft + barWidth, barTop + barHeight);
         float healthRatio = (float) gameManager.getHealth() / GameManager.INITIAL_HEALTH;
@@ -1191,8 +1174,41 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
 
         canvas.drawRect(healthBgRect, healthBarBackgroundPaint);
         canvas.drawRect(healthFgRect, healthBarPaint);
-        canvas.drawText("HP", healthBgRect.centerX() - labelPaint.measureText("HP")/2, 
-                       healthBgRect.centerY() + labelPaint.getTextSize()/3, labelPaint);
+        
+        // Apply flashing animation if health is decreasing
+        if (isHealthAnimating) {
+            long elapsedTime = System.currentTimeMillis() - healthAnimationStartTime;
+            
+            if (elapsedTime < HEALTH_ANIMATION_DURATION_MS) {
+                // Calculate pulsation effect with sine wave - oscillates from 0 to 180 opacity
+                float normalized = (float) elapsedTime / HEALTH_ANIMATION_DURATION_MS;
+                float pulseIntensity = (float) Math.abs(Math.sin(normalized * Math.PI * 6)); // Animate 3 full cycles
+                int alpha = (int) (180 * pulseIntensity);
+                
+                // Apply flash over the health bar
+                healthFlashPaint.setAlpha(alpha);
+                canvas.drawRect(healthBgRect, healthFlashPaint);
+                
+                // Update screen flash if active
+                if (isScreenFlashing) {
+                    // Screen flash is less intense and fades out faster
+                    int screenAlpha = (int) (100 * pulseIntensity * (1.0f - normalized)); // Fades out over time
+                    screenFlashPaint.setAlpha(screenAlpha);
+                }
+                
+                // Keep animation going by repainting
+                invalidate();
+            } else {
+                // Animation complete
+                isHealthAnimating = false;
+                isScreenFlashing = false;
+                healthFlashPaint.setAlpha(0);
+                screenFlashPaint.setAlpha(0);
+            }
+        }
+        
+        canvas.drawText("HP", healthBgRect.centerX() - labelPaint.measureText("HP")/2,
+                healthBgRect.centerY() + labelPaint.getTextSize()/3, labelPaint);
     }
 
     private void drawMemory(Canvas canvas, Rect area) {
@@ -1280,26 +1296,26 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
                 if (p == draggingProcess) continue;
 
                 // Draw process representation
-                RectF pBounds = getProcessVisualBoundsOnCore(core.getId(), p);
-                if (pBounds != null) {
+                 RectF pBounds = getProcessVisualBoundsOnCore(core.getId(), p);
+                 if (pBounds != null) {
                     drawProcessRepresentation(canvas, p, pBounds, animationValue, p.getCurrentState() == Process.ProcessState.IN_QUEUE);
 
-                    // Draw CPU Timer progress below the process
-                    float cpuProgressRatio = 1.0f - (float)(p.getRemainingCpuTime() / p.getCpuTimer());
-                    int progressWidth = (int)(coreRect.width() * 0.8f);
-                    int progressLeft = coreRect.left + (coreRect.width() - progressWidth) / 2;
-                    int progressTop = (int)(pBounds.bottom + 5); // Position below process
-                    int progressHeight = 20;
+                     // Draw CPU Timer progress below the process
+                     float cpuProgressRatio = 1.0f - (float)(p.getRemainingCpuTime() / p.getCpuTimer());
+                     int progressWidth = (int)(coreRect.width() * 0.8f);
+                     int progressLeft = coreRect.left + (coreRect.width() - progressWidth) / 2;
+                     int progressTop = (int)(pBounds.bottom + 5); // Position below process
+                     int progressHeight = 20;
                     
                     // Draw progress background
-                    tempRect.set(progressLeft, progressTop, progressLeft + progressWidth, progressTop + progressHeight);
+                     tempRect.set(progressLeft, progressTop, progressLeft + progressWidth, progressTop + progressHeight);
                     Paint progressBgPaint = new Paint(memoryCellPaint);
                     progressBgPaint.setStyle(Paint.Style.FILL);
                     progressBgPaint.setColor(Color.parseColor("#424242")); // Dark gray
                     canvas.drawRect(tempRect, progressBgPaint);
                     
                     // Draw progress foreground
-                    tempRect.right = progressLeft + (int)(progressWidth * cpuProgressRatio);
+                     tempRect.right = progressLeft + (int)(progressWidth * cpuProgressRatio);
                     Paint progressFgPaint = new Paint(memoryUsedPaint);
                     // Color gets greener as it completes
                     float hue = cpuProgressRatio * 120; // 0 is red, 120 is green
@@ -1317,9 +1333,9 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
                     }
 
                     // Draw the downward arrow for IO processes waiting for IO
-                    if (p instanceof IOProcess) {
-                        IOProcess ioP = (IOProcess) p;
-                        if (ioP.isCpuPausedForIO()) {
+                 if (p instanceof IOProcess) {
+                    IOProcess ioP = (IOProcess) p;
+                    if (ioP.isCpuPausedForIO()) {
                             // Draw arrow pointing downward
                             Paint arrowPaint = new Paint();
                             arrowPaint.setColor(Color.parseColor("#FF5252")); // Bright red
@@ -1351,7 +1367,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
                             canvas.drawText("Move to I/O", arrowEndX, arrowEndY + 20, labelPaint);
                         }
                     }
-                }
+                 }
             }
         }
     }
@@ -1432,7 +1448,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
      * Draws the buffer area with improved visualization.
      * Shows processes in a stack-like representation with data flow indicators.
      */
-    private void drawBuffer(Canvas canvas) {
+     private void drawBuffer(Canvas canvas) {
         // Get the processes in the buffer using SharedBuffer's methods
         Process[] bufferProcesses = gameManager.getSharedBuffer().getProcessesInBuffer();
         int bufferSize = gameManager.getSharedBuffer().size();
@@ -1788,14 +1804,146 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
                         height - 15, consoleTextPaint);
     }
     
-    // Update the draw method to include the system console
+    /**
+     * Draws the pause button in the top-right corner
+     */
+    private void drawPauseButton(Canvas canvas) {
+        // Use fixed position and size rather than relative to processQueueAreaRect
+        int buttonSize = 90;
+        float screenWidth = getWidth();
+        float screenHeight = getHeight();
+        
+        // Position in top right of I/O area
+        float buttonX = ioAreaRect.right - buttonSize - 20;
+        float buttonY = ioAreaRect.top + 20;
+        
+        pauseButtonRect.set(buttonX, buttonY, buttonX + buttonSize, buttonY + buttonSize);
+        
+        // Draw button with high contrast colors
+        pauseButtonPaint.setColor(Color.parseColor("#FF0000")); // Pure red
+        canvas.drawRoundRect(pauseButtonRect, 15, 15, pauseButtonPaint);
+        
+        // Add thick white border for better visibility
+        Paint borderPaint = new Paint();
+        borderPaint.setColor(Color.WHITE);
+        borderPaint.setStyle(Paint.Style.STROKE);
+        borderPaint.setStrokeWidth(6);
+        canvas.drawRoundRect(pauseButtonRect, 15, 15, borderPaint);
+        
+        // Draw pause or play icon based on current state
+        if (isPaused) {
+            // Draw play triangle
+            Path playIcon = new Path();
+            float centerX = pauseButtonRect.centerX();
+            float centerY = pauseButtonRect.centerY();
+            float size = 30;
+            
+            playIcon.moveTo(centerX - size/2, centerY - size);
+            playIcon.lineTo(centerX - size/2, centerY + size);
+            playIcon.lineTo(centerX + size, centerY);
+            playIcon.close();
+            
+            Paint iconPaint = new Paint();
+            iconPaint.setColor(Color.WHITE);
+            iconPaint.setStyle(Paint.Style.FILL);
+            canvas.drawPath(playIcon, iconPaint);
+        } else {
+            // Draw pause bars
+            float centerX = pauseButtonRect.centerX();
+            float centerY = pauseButtonRect.centerY();
+            float size = 25;
+            
+            Paint iconPaint = new Paint();
+            iconPaint.setColor(Color.WHITE);
+            iconPaint.setStyle(Paint.Style.FILL);
+            
+            // Left bar
+            canvas.drawRect(centerX - size - 5, centerY - size, centerX - 5, centerY + size, iconPaint);
+            // Right bar
+            canvas.drawRect(centerX + 5, centerY - size, centerX + size + 5, centerY + size, iconPaint);
+        }
+        
+        // Add text label below button for extra clarity
+        Paint textPaint = new Paint();
+        textPaint.setColor(Color.WHITE);
+        textPaint.setTextSize(22);
+        textPaint.setTextAlign(Paint.Align.CENTER);
+        textPaint.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+        
+        String buttonText = isPaused ? "PLAY" : "PAUSE";
+        canvas.drawText(buttonText, pauseButtonRect.centerX(), pauseButtonRect.bottom + 30, textPaint);
+        
+        // Log for debugging
+        Log.d("GameView", "Drawing pause button at " + pauseButtonRect.toString());
+    }
+    
+    /**
+     * Draws the pause overlay with resume button when the game is paused
+     */
+    private void drawPauseOverlay(Canvas canvas) {
+        int width = canvas.getWidth();
+        int height = canvas.getHeight();
+        
+        // Full screen overlay
+        canvas.drawRect(0, 0, width, height, pauseOverlayPaint);
+        
+        // Pause menu panel
+        int panelWidth = width * 2/3;
+        int panelHeight = height / 2; // Taller panel to fit two buttons
+        int panelLeft = (width - panelWidth) / 2;
+        int panelTop = (height - panelHeight) / 2;
+        RectF pausePanel = new RectF(panelLeft, panelTop, panelLeft + panelWidth, panelTop + panelHeight);
+        canvas.drawRoundRect(pausePanel, 20, 20, pauseMenuPaint);
+        
+        // Pause title
+        Paint titlePaint = new Paint(pauseButtonTextPaint);
+        titlePaint.setTextSize(50);
+        canvas.drawText("GAME PAUSED", pausePanel.centerX(), pausePanel.top + 80, titlePaint);
+        
+        // Button dimensions
+        int buttonWidth = panelWidth / 2;
+        int buttonHeight = 80;
+        int buttonSpacing = 40; // Space between buttons
+        
+        // Resume button - positioned higher in the panel
+        int resumeButtonTop = (int) pausePanel.top + 140;
+        resumeButtonRect.set((width - buttonWidth) / 2, resumeButtonTop, 
+                             (width + buttonWidth) / 2, resumeButtonTop + buttonHeight);
+        
+        // Draw resume button with green color
+        Paint resumeButtonPaint = new Paint(pauseButtonPaint);
+        resumeButtonPaint.setColor(Color.parseColor("#4CAF50")); // Green
+        canvas.drawRoundRect(resumeButtonRect, 10, 10, resumeButtonPaint);
+        canvas.drawText("RESUME", resumeButtonRect.centerX(), resumeButtonRect.centerY() + 15, pauseButtonTextPaint);
+        
+        // Quit button - positioned below the resume button
+        int quitButtonTop = resumeButtonTop + buttonHeight + buttonSpacing;
+        quitFromPauseRect.set((width - buttonWidth) / 2, quitButtonTop, 
+                             (width + buttonWidth) / 2, quitButtonTop + buttonHeight);
+        
+        // Draw quit button with red color
+        Paint quitButtonPaint = new Paint();
+        quitButtonPaint.setColor(Color.parseColor("#D32F2F")); // Darker red
+        quitButtonPaint.setStyle(Paint.Style.FILL);
+        canvas.drawRoundRect(quitFromPauseRect, 10, 10, quitButtonPaint);
+        canvas.drawText("QUIT TO TITLE", quitFromPauseRect.centerX(), quitFromPauseRect.centerY() + 15, pauseButtonTextPaint);
+        
+        // Debug log to confirm overlay is drawing both buttons
+        Log.d("GameView", "Drawing pause overlay with resume button at " + resumeButtonRect.toString() 
+                + " and quit button at " + quitFromPauseRect.toString());
+    }
+    
+    // Update the draw method to include pause button and overlay
     @Override
     public void draw(Canvas canvas) {
         super.draw(canvas);
         
         if (canvas == null) {
+            Log.e("GameView", "Canvas is null in draw method");
             return;
         }
+
+        Log.d("GameView", "Drawing game view with canvas width: " + canvas.getWidth() + ", height: " + canvas.getHeight());
 
         // Fill background
         canvas.drawColor(backgroundPaint.getColor());
@@ -1805,6 +1953,46 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
         
         // Draw system console at the bottom
         drawSystemConsole(canvas, getWidth(), getHeight());
+        
+        // IMPORTANT: Draw pause button above all other elements
+        Log.d("GameView", "About to draw pause button");
+        drawPauseButton(canvas);
+        Log.d("GameView", "Finished drawing pause button");
+        
+        // Apply screen flash effect for health damage
+        if (isScreenFlashing && screenFlashPaint.getAlpha() > 0) {
+            // Draw full-screen semi-transparent red overlay
+            canvas.drawRect(0, 0, getWidth(), getHeight(), screenFlashPaint);
+        }
+        
+        // Draw floating damage indicator if active
+        if (showDamageIndicator) {
+            long elapsedTime = System.currentTimeMillis() - damageIndicatorStartTime;
+            
+            if (elapsedTime < DAMAGE_INDICATOR_DURATION_MS) {
+                // Calculate fade out and float up effect
+                float progress = (float) elapsedTime / DAMAGE_INDICATOR_DURATION_MS;
+                int alpha = (int) (255 * (1.0f - progress)); // Fade out
+                float offsetY = -100 * progress; // Float up 100 pixels
+                
+                // Apply animation effects
+                damageTextPaint.setAlpha(alpha);
+                
+                // Draw the damage text
+                canvas.drawText(damageText, damageTextX, damageTextY + offsetY, damageTextPaint);
+                
+                // Keep animation going
+                invalidate();
+            } else {
+                // Animation complete
+                showDamageIndicator = false;
+            }
+        }
+        
+        // Draw pause overlay if paused
+        if (isPaused) {
+            drawPauseOverlay(canvas);
+        }
         
         // Draw game over UI if needed
         if (isGameOver) {
@@ -2184,4 +2372,177 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
         }
     }
 
+    private Process findDraggableProcessAt(float x, float y) {
+        // 1. Check processes in the queue (only the head is draggable)
+        Process headProcess = gameManager.getProcessManager().getProcessQueue().peek();
+        if (headProcess != null) {
+            Rect headRect = queueProcessRects.get(headProcess.getId());
+            if (headRect != null && headRect.contains((int) x, (int) y)) {
+                 if (gameManager.getProcessManager().isProcessAtHead(headProcess.getId())) {
+                    return headProcess;
+                 } else { 
+                     Log.w(TAG, "Attempted to drag non-head process: " + headProcess.getId());
+                     // TODO: Show brief error feedback (e.g., flash red)?
+                 }
+            }
+        }
+
+        // 2. Check processes on cores that require IO interaction
+        for (Map.Entry<Integer, Rect> entry : coreAreaRects.entrySet()) {
+            Core core = gameManager.getCpuCores().get(entry.getKey());
+            Process p = core.getCurrentProcess();
+            if (p != null && p instanceof IOProcess) {
+                IOProcess ioP = (IOProcess) p;
+                if (ioP.isCpuPausedForIO()) {
+                    RectF pBounds = getProcessVisualBoundsOnCore(core.getId(), p);
+                    if (pBounds != null && pBounds.contains(x, y)) {
+                        return p;
+                    }
+                    else if (entry.getValue().contains((int) x, (int) y)) {
+                        Log.w(TAG, "Hit core area for IO process, not specific bounds");
+                        return p;
+                    }
+                }
+            }
+        }
+
+        // 3. Check process in the IO Area if it's completed IO
+        Process pInIO = gameManager.getIoArea().getCurrentProcess();
+        if (pInIO != null && pInIO instanceof IOProcess) {
+            IOProcess ioP = (IOProcess) pInIO;
+            if (ioP.isIoCompleted()) {
+                RectF pBounds = getProcessVisualBoundsInIO(pInIO);
+                if (pBounds != null && pBounds.contains(x, y)) {
+                    return pInIO;
+                }
+                else if (ioAreaRect.contains((int) x, (int) y)) {
+                    Log.w(TAG, "Hit IO area for completed IO process, not specific bounds");
+                    return pInIO;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    
+    private RectF getProcessVisualBounds(Process process) { // Return RectF now
+        if (process == null) return null;
+
+        Rect intRect = null;
+        RectF floatRect = null;
+
+        // Check queue
+        intRect = queueProcessRects.get(process.getId());
+        if (intRect != null) return new RectF(intRect);
+
+        // Check cores
+        int coreId = findCoreIdForProcess(process.getId());
+        if (coreId != -1) {
+            return getProcessVisualBoundsOnCore(coreId, process);
+        }
+
+        // Check IO Area
+        if (gameManager.getIoArea().getCurrentProcess() != null && 
+            gameManager.getIoArea().getCurrentProcess().getId() == process.getId()) {
+            return getProcessVisualBoundsInIO(process);
+        }
+
+        return null; 
+    }
+
+    // Helper to calculate visual bounds of a process *drawn on* a specific core
+    private RectF getProcessVisualBoundsOnCore(int coreId, Process p) {
+        Rect coreRect = coreAreaRects.get(coreId);
+        if (coreRect == null || p == null) return null;
+
+        float pWidth = processOnCoreWidth;
+        float pHeight = processOnCoreHeight;
+        float pLeft = coreRect.centerX() - pWidth / 2;
+        float pTop = coreRect.centerY() - pHeight / 2 - 15; // Matches drawing logic
+        return new RectF(pLeft, pTop, pLeft + pWidth, pTop + pHeight);
+    }
+
+    // Helper to calculate visual bounds of a process *drawn in* the IO Area
+    private RectF getProcessVisualBoundsInIO(Process p) {
+        if (p == null) return null;
+        float pWidth = processInIoWidth;
+        float pHeight = processInIoHeight;
+        float pLeft = ioAreaRect.centerX() - pWidth / 2;
+        float pTop = ioAreaRect.centerY() - pHeight / 2 - 15; // Matches drawing logic
+        return new RectF(pLeft, pTop, pLeft + pWidth, pTop + pHeight);
+    }
+
+    
+    private int findCoreIdForProcess(int processId) {
+        for(Core core : gameManager.getCpuCores()) {
+            if(core.isUtilized() && core.getCurrentProcess() != null && 
+               core.getCurrentProcess().getId() == processId) {
+                return core.getId();
+            }
+        }
+        return -1; 
+    }
+
+    
+    private void handleDrop(Process droppedProcess, float dropX, float dropY) {
+        Process.ProcessState sourceState = droppedProcess.getCurrentState();
+
+        // Check drop target: Cores
+        for (Map.Entry<Integer, Rect> entry : coreAreaRects.entrySet()) {
+            int coreId = entry.getKey();
+            Rect coreRect = entry.getValue();
+            if (coreRect.contains((int) dropX, (int) dropY)) {
+                Log.d(TAG, "Dropped Process " + droppedProcess.getId() + " onto Core " + coreId);
+                if (sourceState == Process.ProcessState.IN_QUEUE) {
+                    if (gameManager.getProcessManager().isProcessAtHead(droppedProcess.getId())) {
+                        // Check if there's enough memory to allocate the process
+                        if (!gameManager.getMemory().hasEnoughMemory(droppedProcess.getMemoryRequirement())) {
+                            // Not enough memory - provide vibration feedback
+                            vibrateForError();
+                            showInsufficientResourcesError();
+                        } else {
+                            gameManager.moveProcessFromQueueToCore(droppedProcess.getId(), coreId);
+                        }
+                    } else {
+                        Log.e(TAG, "FCFS Error on drop - Process " + droppedProcess.getId() + " no longer at head.");
+                    }
+                } else if (sourceState == Process.ProcessState.IN_IO && droppedProcess instanceof IOProcess) {
+                    IOProcess ioP = (IOProcess) droppedProcess;
+                    if (ioP.isIoCompleted()) {
+                        gameManager.moveProcessFromIOToCore(droppedProcess.getId(), coreId);
+                    } else {
+                        Log.w(TAG, "Invalid drop onto Core " + coreId + ": IO Process from IO area not completed IO.");
+                    }
+                } else {
+                    Log.w(TAG, "Invalid drop onto Core " + coreId + " from state " + sourceState);
+                }
+                return;
+            }
+        }
+
+        // Check drop target: IO Area
+        if (ioAreaRect.contains((int) dropX, (int) dropY)) {
+            Log.d(TAG, "Dropped Process " + droppedProcess.getId() + " onto IO Area");
+            if (sourceState == Process.ProcessState.ON_CORE && droppedProcess instanceof IOProcess) {
+                IOProcess ioP = (IOProcess) droppedProcess;
+                if (ioP.isCpuPausedForIO()) {
+                    int sourceCoreId = (originalSourceCoreId != -1) ? originalSourceCoreId : 
+                                      findCoreIdForProcess(droppedProcess.getId());
+                    if (sourceCoreId != -1) {
+                        gameManager.moveProcessFromCoreToIO(droppedProcess.getId(), sourceCoreId);
+                    } else {
+                        Log.e(TAG, "Could not find source core for IO process drop?");
+                    }
+                } else {
+                    Log.w(TAG, "Invalid drop onto IO Area: IOProcess on core is not paused for IO.");
+                }
+            } else {
+                Log.w(TAG, "Invalid drop onto IO Area from state " + sourceState + " or not an IOProcess.");
+            }
+            return;
+        }
+
+        Log.d(TAG, "Process " + droppedProcess.getId() + " dropped onto invalid area.");
+    }
 } 

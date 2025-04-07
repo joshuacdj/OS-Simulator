@@ -63,7 +63,7 @@ public class GameThread extends Thread {
 
                     // draw the current game state to the canvas
                     if (canvas != null) {
-                        this.gameView.drawGame(canvas);
+                        this.gameView.draw(canvas);
                     }
                 }
             } catch (Exception e) {

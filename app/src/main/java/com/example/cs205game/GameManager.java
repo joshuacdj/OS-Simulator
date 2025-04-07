@@ -95,6 +95,9 @@ public class GameManager {
         Log.i(TAG, "Stopping game and client threads...");
         gameRunning = false;
 
+        // Shut down the shared buffer to wake up any waiting threads
+        sharedBuffer.shutdown();
+
         // signal clients to stop their run loop
         for (Client client : clients) {
             client.stop();
@@ -156,16 +159,16 @@ public class GameManager {
     }
 
     /**
-     * callback from core when a process finishes its cpu execution.
-     * moves the process to the sharedbuffer and frees its memory.
-     * @param coreid the id of the core that finished.
-     * @param process the process that completed its cpu time.
+     * Callback from core when a process finishes its CPU execution.
+     * Moves the process to the SharedBuffer and frees its memory.
+     * @param coreId the id of the core that finished.
+     * @param process the process that completed its CPU time.
      */
     private void handleCpuCompleted(int coreId, Process process) {
-        // note: core.removeprocess() was already called inside core.update before this callback
+        // note: core.removeProcess() was already called inside core.update before this callback
         Log.i(TAG, "Handling CPU completion for Process " + process.getId() + " from Core " + coreId);
 
-        // free memory now that cpu work is done
+        // free memory now that CPU work is done
         memory.freeMemory(process.getMemoryRequirement());
         Log.d(TAG, "Freed memory for Process " + process.getId());
 
@@ -174,9 +177,14 @@ public class GameManager {
             sharedBuffer.put(process);
             Log.d(TAG, "Process " + process.getId() + " added to SharedBuffer.");
         } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            Log.e(TAG, "Interrupted while putting process " + process.getId() + " into buffer", e);
-            // potentially handle game state inconsistency if interrupted here?
+            // Handle shutdown case - may happen during normal game shutdown
+            if (!gameRunning) {
+                Log.d(TAG, "Buffer operation interrupted during shutdown for Process " + process.getId());
+            } else {
+                // Unexpected interruption during normal gameplay
+                Thread.currentThread().interrupt();
+                Log.e(TAG, "Interrupted while putting process " + process.getId() + " into buffer", e);
+            }
         }
     }
 
@@ -475,7 +483,7 @@ public class GameManager {
 
         // clear components
         processManager.reset();
-        sharedBuffer.clear();
+        sharedBuffer.clear(); // This also resets the shutdown flag
         ioArea.clear();
         for (Core core : cpuCores) {
             core.clear();
@@ -487,7 +495,7 @@ public class GameManager {
         
         // startGame() will re-initialize executor and submit clients
         Log.i(TAG, "Game state reset completed.");
-        // caller (like gameview retry handler) should call startgame() if needed immediately
+        // caller (like gameview retry handler) should call startGame() if needed immediately
     }
 
 } 

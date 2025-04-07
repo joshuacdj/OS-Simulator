@@ -88,9 +88,22 @@ public class ProcessManager {
         boolean isIOProcess = random.nextDouble() < IO_PROCESS_PROBABILITY;
         Process newProcess;
         
+        // Memory requirements distribution based on process type and 16GB system memory
+        int memory;
+        double roll = random.nextDouble();
+        
         if (isIOProcess) {
-            // Create an IO process with higher memory requirements
-            int memory = 4 + random.nextInt(5);  // Memory: 4-8 GB
+            // IO processes tend to need more memory
+            if (roll < 0.50) {      // 50% chance: 3-5 GB
+                memory = 3 + random.nextInt(3);
+            } else if (roll < 0.80) { // 30% chance: 6-8 GB
+                memory = 6 + random.nextInt(3);
+            } else if (roll < 0.95) { // 15% chance: 9-12 GB
+                memory = 9 + random.nextInt(4);
+            } else {                // 5% chance: 13-16 GB (heavy workload)
+                memory = 13 + random.nextInt(4);
+            }
+            
             double patience = BASE_PATIENCE_S;
             double cpuTime = 3 + random.nextDouble() * 3;  // CPU Time: 3-6 seconds
             double ioTime = 2 + random.nextDouble() * 3;   // IO Time: 2-5 seconds
@@ -100,8 +113,17 @@ public class ProcessManager {
                    String.format("%.1f", cpuTime) + "s, IO time: " + 
                    String.format("%.1f", ioTime) + "s");
         } else {
-            // Create a regular process
-            int memory = 1 + random.nextInt(3);  // Memory: 1-3 GB
+            // Regular processes typically need less memory
+            if (roll < 0.60) {      // 60% chance: 1-2 GB
+                memory = 1 + random.nextInt(2);
+            } else if (roll < 0.85) { // 25% chance: 3-5 GB
+                memory = 3 + random.nextInt(3);
+            } else if (roll < 0.97) { // 12% chance: 6-8 GB
+                memory = 6 + random.nextInt(3);
+            } else {                // 3% chance: 9-12 GB (heavy processing)
+                memory = 9 + random.nextInt(4);
+            }
+            
             double patience = BASE_PATIENCE_S;
             double cpuTime = 2 + random.nextDouble() * 2;  // CPU Time: 2-4 seconds
             
@@ -112,26 +134,6 @@ public class ProcessManager {
         
         processQueue.offer(newProcess);
         newProcess.setCurrentState(Process.ProcessState.IN_QUEUE);
-    }
-
-    /**
-     * Generates a memory requirement for a new process.
-     * Uses a tiered approach to determine the memory requirement.
-     * @return The generated memory requirement.
-     */
-    private int generateMemoryRequirement() {
-        // Tiered approach for memory generation
-        double roll = random.nextDouble();
-
-        if (roll < 0.60) { // 60% chance for 1-4 GB
-            return MIN_MEMORY_REQ + random.nextInt(4); // Generates 1, 2, 3, 4
-        } else if (roll < 0.90) { // 30% chance for 5-8 GB (0.60 to 0.899)
-            return MIN_MEMORY_REQ + 4 + random.nextInt(4); // Generates 5, 6, 7, 8
-        } else if (roll < 0.98) { // 8% chance for 9-12 GB (0.90 to 0.979..)
-            return MIN_MEMORY_REQ + 8 + random.nextInt(4); // Generates 9, 10, 11, 12
-        } else { // 2% chance for 13-16 GB (0.98 to 0.999)
-            return MIN_MEMORY_REQ + 12 + random.nextInt(4); // Generates 13, 14, 15, 16
-        }
     }
 
     public Queue<Process> getProcessQueue() {

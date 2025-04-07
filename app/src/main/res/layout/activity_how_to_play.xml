@@ -71,7 +71,7 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="1. Process Arrival: New processes (Normal - Cyan, IO - Magenta) appear in the 'Process Queue' on the left. Each has a Memory Requirement (GB) and a Patience Timer (arc around the circle)."
+                android:text="1. Process Arrival: New processes (Normal - Blue, IO - Purple) appear in the 'Process Queue' on the left. Each has a Memory Requirement (GB) and a Patience Timer (arc around the circle). IO processes typically require more memory (3-16GB) than regular processes (1-12GB)."
                 android:textColor="#E0E0E0"
                 android:textSize="16sp"
                 android:fontFamily="monospace"
@@ -80,7 +80,7 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="2. Allocation: Drag the process at the front of the queue (FCFS - First Come First Serve) to an available CPU Core. This requires enough free Memory (top bar). The core must be empty."
+                android:text="2. Allocation: Drag the process at the front of the queue (FCFS - First Come First Serve) to an available CPU Core. This requires enough free Memory (top bar, 16GB total). The core must be empty."
                 android:textColor="#E0E0E0"
                 android:textSize="16sp"
                 android:fontFamily="monospace"
@@ -89,7 +89,7 @@
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="3. Core Processing: The process runs on the core, indicated by a progress bar. IO Processes (Magenta) might pause halfway and require moving to the 'I/O Area'. Drag them when the 'IO!' indicator appears."
+                android:text="3. Core Processing: The process runs on the core, indicated by a progress bar. IO Processes (Purple) might pause halfway and require moving to the 'I/O Area'. Drag them when the 'IO!' indicator appears."
                 android:textColor="#E0E0E0"
                 android:textSize="16sp"
                 android:fontFamily="monospace"
@@ -154,6 +154,34 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="- Game Over: The game ends when HP reaches 0. Tap 'Retry' to start over or 'Quit to Title'."
+                android:textColor="#E0E0E0"
+                android:textSize="16sp"
+                android:fontFamily="monospace"
+                android:layout_marginBottom="16dp"/>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Game Controls:"
+                android:textColor="#C5C6C7"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                android:fontFamily="monospace"
+                android:layout_marginBottom="8dp"/>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="- Pause/Resume: Click the pause button in the top-right corner to pause the game. Click the resume button to continue playing."
+                android:textColor="#E0E0E0"
+                android:textSize="16sp"
+                android:fontFamily="monospace"
+                android:layout_marginBottom="8dp"/>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="- Health Feedback: When your health decreases, the HP bar will flash and the screen may briefly flash red for significant damage."
                 android:textColor="#E0E0E0"
                 android:textSize="16sp"
                 android:fontFamily="monospace"
