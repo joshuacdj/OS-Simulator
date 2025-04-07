@@ -613,8 +613,13 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
         int width = canvas.getWidth();
         int height = canvas.getHeight();
 
-        // Draw background
-        canvas.drawPaint(backgroundPaint);
+        // Draw background using non-deprecated method
+        int color = backgroundPaint.getColor();
+        canvas.drawRGB(
+            Color.red(color),
+            Color.green(color), 
+            Color.blue(color)
+        );
 
         // Ensure layout rects are calculated
         if (processQueueAreaRect.width() == 0) { // Simple check if not calculated yet
@@ -1945,8 +1950,13 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
 
         Log.d("GameView", "Drawing game view with canvas width: " + canvas.getWidth() + ", height: " + canvas.getHeight());
 
-        // Fill background
-        canvas.drawColor(backgroundPaint.getColor());
+        // Fill background using non-deprecated drawRGB instead of drawColor
+        int color = backgroundPaint.getColor();
+        canvas.drawRGB(
+            Color.red(color),
+            Color.green(color), 
+            Color.blue(color)
+        );
         
         // Draw game elements
         drawGame(canvas);
@@ -2008,18 +2018,17 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
         if (context != null) {
             android.os.Vibrator vibrator = (android.os.Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
             if (vibrator != null && vibrator.hasVibrator()) {
-                // Check if we're on API 26 or higher for newer vibration API
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                    // Create a sharp, error-like vibration effect
-                    android.os.VibrationEffect errorVibration = android.os.VibrationEffect.createOneShot(
-                        300, // 300ms duration
-                        android.os.VibrationEffect.DEFAULT_AMPLITUDE
-                    );
-                    vibrator.vibrate(errorVibration);
-                } else {
-                    // Legacy vibration for older devices
-                    vibrator.vibrate(300);
-                }
+                // For Android 14 (API 34), use VibrationEffect with VibrationAttributes
+                android.os.VibrationEffect effect = android.os.VibrationEffect.createOneShot(
+                    300, // 300ms duration
+                    android.os.VibrationEffect.DEFAULT_AMPLITUDE
+                );
+                
+                android.os.VibrationAttributes attributes = android.os.VibrationAttributes.createForUsage(
+                    android.os.VibrationAttributes.USAGE_ALARM
+                );
+                
+                vibrator.vibrate(effect, attributes);
                 
                 Log.d(TAG, "Vibration feedback provided for insufficient resources");
             }
@@ -2036,14 +2045,14 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
         errorDisplayStartTime = System.currentTimeMillis();
         
         // Create a handler to clear the error after a delay
-        android.os.Handler handler = new android.os.Handler();
+        android.os.Handler handler = new android.os.Handler(android.os.Looper.getMainLooper());
         handler.postDelayed(new Runnable() {
             @Override
             public void run() {
                 isShowingError = false;
                 invalidate(); // Trigger redraw
             }
-        }, 1000); // Show error for 2 seconds
+        }, 1000); // Show error for 1 second
         
         // Force a redraw to show the error immediately
         invalidate();
