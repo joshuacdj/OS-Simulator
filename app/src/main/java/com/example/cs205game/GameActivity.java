@@ -29,17 +29,21 @@ public class GameActivity extends Activity {
         setContentView(gameView);
 
         // try to make it fullscreen removes title bar
-        getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
-                WindowManager.LayoutParams.FLAG_FULLSCREEN);
+        // getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
+        //         WindowManager.LayoutParams.FLAG_FULLSCREEN);
 
         // try hide the system nav/status bars too
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            getWindow().setDecorFitsSystemWindows(false);
             WindowInsetsController controller = getWindow().getInsetsController();
             if (controller != null) {
                 controller.hide(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
                 controller.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
             } else {
-                 Log.w(TAG, "WindowInsetsController is null");
+                // Log.w(TAG, "Fallback to deprecated API");
+                // getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
+                //         WindowManager.LayoutParams.FLAG_FULLSCREEN);
+                Log.w(TAG, "WindowInsetsController is null");
             }
         } else {
             // older android versions might need different flags

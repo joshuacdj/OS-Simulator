@@ -10,6 +10,7 @@ import android.graphics.PointF;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.Typeface;
+import android.os.Vibrator;
 import android.util.Log;
 import android.view.MotionEvent;
 import android.view.SurfaceHolder;
@@ -17,7 +18,8 @@ import android.view.SurfaceView;
 import android.util.AttributeSet;
 import android.app.Activity;
 import android.animation.ValueAnimator;
-import android.view.animation.LinearInterpolator;
+
+import androidx.annotation.NonNull;
 
 import java.util.HashMap;
 import java.util.List;
@@ -29,8 +31,8 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
 
     private static final String TAG = "GameView";
     private GameThread thread;
-    private GameManager gameManager;
-    private SharedBuffer sharedBuffer;
+    private final GameManager gameManager;
+    private final SharedBuffer sharedBuffer;
 
     // --- Paints ---
     private Paint backgroundPaint;
@@ -454,7 +456,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
 
     @SuppressLint("ClickableViewAccessibility")
     @Override
-    public boolean onTouchEvent(MotionEvent event) {
+    public boolean onTouchEvent(@NonNull MotionEvent event) {
         int x = (int) event.getX();
         int y = (int) event.getY();
         int action = event.getAction();
@@ -843,7 +845,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
         }
     }
 
-    private void drawMemoryStatus(Canvas canvas) {
+    private void drawMemoryStatus(@NonNull Canvas canvas) {
         // Draw memory status in top-right corner with black bold text
         String memText = String.format("MEM: %d / %d GB", 
             gameManager.getMemory().getUsedMemory(),
@@ -856,7 +858,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
         canvas.drawText(memText, memX, memY, labelPaint);
     }
 
-    private void drawScore(Canvas canvas) {
+    private void drawScore(@NonNull Canvas canvas) {
         String scoreText = "Score: " + gameManager.getScore();
         float scoreX = 300;  // Fixed position from left
         float scoreY = 60;   // Aligned with memory text
@@ -880,7 +882,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
     }
 
     /** Overload to draw process in a specific RectF */
-    private void drawProcessRepresentation(Canvas canvas, Process p, RectF bounds, float alpha, boolean inQueue) {
+    private void drawProcessRepresentation(@NonNull Canvas canvas, @NonNull Process p, RectF bounds, float alpha, boolean inQueue) {
         boolean isIOProcess = p instanceof IOProcess;
         
         // Draw chip background
@@ -1085,7 +1087,7 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
         drawProcessRepresentation(canvas, p, tempRectF, animationValue, p.getCurrentState() == Process.ProcessState.IN_QUEUE);
     }
 
-    private void drawPatienceArc(Canvas canvas, Process p, RectF circleBounds) {
+    private void drawPatienceArc(Canvas canvas, @NonNull Process p, RectF circleBounds) {
         // Calculate the patience ratio
         float patienceRatio = (float) p.getRemainingPatienceRatio();
         float sweepAngle = 360f * patienceRatio;
@@ -2016,20 +2018,20 @@ public class GameView extends SurfaceView implements SurfaceHolder.Callback {
     private void vibrateForError() {
         Context context = getContext();
         if (context != null) {
-            android.os.Vibrator vibrator = (android.os.Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
+            Vibrator vibrator = context.getSystemService(Vibrator.class);
             if (vibrator != null && vibrator.hasVibrator()) {
                 // For Android 14 (API 34), use VibrationEffect with VibrationAttributes
                 android.os.VibrationEffect effect = android.os.VibrationEffect.createOneShot(
                     300, // 300ms duration
                     android.os.VibrationEffect.DEFAULT_AMPLITUDE
                 );
-                
+
                 android.os.VibrationAttributes attributes = android.os.VibrationAttributes.createForUsage(
                     android.os.VibrationAttributes.USAGE_ALARM
                 );
-                
+
                 vibrator.vibrate(effect, attributes);
-                
+
                 Log.d(TAG, "Vibration feedback provided for insufficient resources");
             }
         }

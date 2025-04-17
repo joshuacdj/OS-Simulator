@@ -67,7 +67,7 @@ public class GameManager {
         Log.i(TAG, "GameManager initialized.");
 
         // Get Vibrator service
-        vibrator = (Vibrator) this.context.getSystemService(Context.VIBRATOR_SERVICE);
+        vibrator = context.getSystemService(Vibrator.class);
         if (vibrator == null || !vibrator.hasVibrator()) {
             Log.w(TAG, "Vibrator not available or service not found");
             vibrator = null; // ensure vibrator is null if unusable
